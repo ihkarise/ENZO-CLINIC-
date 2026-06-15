@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta name="theme-color" content="#557B97" />
-<title>Enzo Homoeo Medical Centre</title>
+<title>Enzo Homoeo Medical Centre</title>h
 <link rel="icon" type="image/png" href="assets/favicon.png"/>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="assets/icon-192.png"/>
@@ -321,7 +321,7 @@
                   <button class="chip" data-d="60">60 days</button>
                   <button class="chip" data-d="90">90 days</button>
                   <span class="chip-custom"><input type="number" id="custom" min="1" max="365" placeholder="--" aria-label="Custom number of days"/><span>days</span></span>
-                </div>
+                </div>h
               </div>
             </div>
 
@@ -452,7 +452,7 @@ async function doLogin(){
   if(!u||!p){$('loginErr').textContent='Enter username and password.';return;}
   $('loginBtn').disabled=true;$('loginErr').textContent='';
   if(!CONFIG.WEB_APP_URL){TOKEN='demo';return enterApp();}
-  try{const r=await fetch(CONFIG.WEB_APP_URL,{method:'POST',body:JSON.stringify({action:'login',user:u,pass:p})});
+  try{const r=await fetch(CONFIG.WEB_APP_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'login',user:u,pass:p})});
     const d=await r.json();
     if(d.ok){TOKEN=d.token;enterApp();}else{$('loginErr').textContent='Wrong username or password.';$('loginBtn').disabled=false;}
   }catch(e){$('loginErr').textContent='Could not reach the server.';$('loginBtn').disabled=false;}
