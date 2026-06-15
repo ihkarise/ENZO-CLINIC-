@@ -452,7 +452,7 @@ async function doLogin(){
   if(!u||!p){$('loginErr').textContent='Enter username and password.';return;}
   $('loginBtn').disabled=true;$('loginErr').textContent='';
   if(!CONFIG.WEB_APP_URL){TOKEN='demo';return enterApp();}
-  try{const r=await fetch(CONFIG.WEB_APP_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'login',user:u,pass:p})});
+  try{const r=await fetch(CONFIG.WEB_APP_URL,{method:'POST',body:JSON.stringify({action:'login',user:u,pass:p})});
     const d=await r.json();
     if(d.ok){TOKEN=d.token;enterApp();}else{$('loginErr').textContent='Wrong username or password.';$('loginBtn').disabled=false;}
   }catch(e){$('loginErr').textContent='Could not reach the server.';$('loginBtn').disabled=false;}
