@@ -1,7 +1,7 @@
 /* Enzo Homoeo — service worker
    Caches the app shell so it opens instantly and works offline.
    Bump CACHE when you change index.html so users get the update. */
-const CACHE = 'enzo-v4';
+const CACHE = 'enzo-v5';
 const SHELL = [
   './',
   './index.html',
