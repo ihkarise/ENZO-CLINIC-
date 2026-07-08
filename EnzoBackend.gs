@@ -1,11 +1,25 @@
 /**
- * Enzo Homoeo — Secured backend v2 (Apps Script + Google Sheet)
+ * Enzo Homoeo — Secured backend v3 (Apps Script + Google Sheet)
+ * Phase 1: Foundation + Workflow.
  *
- * Adds full appointment management: edit, delete, reschedule, time slots,
- * and double-booking prevention. Every data call needs a login token.
+ * Adds the clinic consultation workflow on top of the existing appointment
+ * management (book / update / delete / slot clash prevention / reminders):
+ * a "complete" action that records a consultation outcome, auto-books the
+ * follow-up appointment and auto-creates the Online Record — so reception
+ * and the doctor never re-type the same visit twice. Every new column is
+ * appended after the original ones; nothing already in the sheet moves, so
+ * existing rows and existing formulas keep working untouched.
  *
  * TABS:
  *  "Appointments"  A Name | B Phone | C Visit | D Days | E Type |
+ *                  F Follow-up(f, legacy) | G Call(f, legacy) | H Status(legacy) | I Notes(legacy) |
+ *                  J ID | K Appt Date | L Slot |
+ *                  M Stage | N Diagnosis | O Clinical Notes | P Medicine Duration |
+ *                  Q Medicine Notes | R Follow-up Date | S Outcome | T Parent Appt ID
+ *  "OnlineRecords" A Name | B Phone | C Place | D Consultation Date | E Referred By | F Notes
+ *
+ * Stage is one of: Scheduled | Completed | Cancelled | NoShow. A blank
+ * Stage cell (any row created before this update) is treated as Scheduled.
  *                  F Follow-up(f) | G Call(f) | H Status | I Notes |
  *                  J ID | K Appt Date | L Slot | M Diagnosis
  *  "OnlineRecords" A Name | B Phone | C Place | D Consultation Date | E Referred By | F Notes
@@ -20,6 +34,22 @@ const SESSION_SECS = 6 * 3600;
 const ROLES = ['Receptionist', 'Doctor', 'Administrator'];
 
 // 0-based columns
+const COL  = {
+  name:0, phone:1, visit:2, days:3, type:4, due:5, call:6, status:7, notes:8, id:9, appt:10, slot:11,
+  stage:12, diagnosis:13, clinicalNotes:14, medDuration:15, medNotes:16, followUp:17, outcome:18, parentId:19
+};
+const COLO = { name:0, phone:1, place:2, date:3, refby:4, notes:5 };
+
+/* ===== ONE-TIME SETUP: edit users, run once, then delete this function =====
+ * ROLE_<user> is optional. Any user without one defaults to Administrator
+ * (full access) so existing single shared logins are never locked out by
+ * the new role system — assign Receptionist/Doctor explicitly to restrict. */
+function setCredentials(){
+  const props = PropertiesService.getScriptProperties();
+  props.setProperty('USER_admin',   hash('ChangeThis#2026'));
+  props.setProperty('ROLE_admin',   'Administrator');
+  props.setProperty('USER_jasmine', hash('AnotherStrongPass'));
+  props.setProperty('ROLE_jasmine', 'Receptionist');
 const COL  = { name:0, phone:1, visit:2, days:3, type:4, due:5, call:6, status:7, notes:8, id:9, appt:10, slot:11, diagnosis:12 };
 const COLO = { name:0, phone:1, place:2, date:3, refby:4, notes:5 };
 
@@ -43,9 +73,13 @@ function roleOf(user){
 }
 function login(user, pass){
   if(!user || !pass) return { ok:false };
-  const stored = PropertiesService.getScriptProperties().getProperty('USER_' + user);
+  const props = PropertiesService.getScriptProperties();
+  const stored = props.getProperty('USER_' + user);
   if(stored && stored === hash(pass)){
     const token = Utilities.getUuid();
+    CacheService.getScriptCache().put('tok_' + token, user, SESSION_SECS);
+    const role = props.getProperty('ROLE_' + user) || 'Administrator';
+    return { ok:true, token:token, role:role };
     const role = roleOf(user);
     CacheService.getScriptCache().put('tok_' + token, user + '|' + role, SESSION_SECS);
     return { ok:true, token:token, role:role, name:user };
@@ -80,7 +114,7 @@ function rowById(sheet, id){
   for(let i = 1; i < data.length; i++){ if(String(data[i][COL.id]) === String(id)) return i + 1; }
   return 0;
 }
-/* is a date+slot already used by a different appointment? */
+/* is a date+slot already used by a different, still-open appointment? */
 function slotTaken(sheet, dateStr, slot, exceptId){
   if(!slot || !dateStr) return false;
   const data = sheet.getDataRange().getValues();
@@ -88,16 +122,18 @@ function slotTaken(sheet, dateStr, slot, exceptId){
     const r = data[i];
     if(!r[COL.name]) continue;
     if(String(r[COL.id]) === String(exceptId)) continue;
+    const stage = String(r[COL.stage] || '').trim();
+    if(stage === 'Cancelled' || stage === 'NoShow') continue;
     if(String(r[COL.slot]) === String(slot) && r[COL.appt] && fmt(r[COL.appt]) === dateStr) return true;
   }
   return false;
 }
 function setFormulas(sheet, row){
-  sheet.getRange(row, 6).setFormula('=IF(AND(C'+row+'<>"",D'+row+'<>""),C'+row+'+D'+row+',"")');         // F Follow-up
-  sheet.getRange(row, 7).setFormula('=IF(K'+row+'<>"",K'+row+'-1,IF(F'+row+'<>"",F'+row+'-1,""))');        // G Call
+  sheet.getRange(row, 6).setFormula('=IF(AND(C'+row+'<>"",D'+row+'<>""),C'+row+'+D'+row+',"")');         // F Follow-up (legacy)
+  sheet.getRange(row, 7).setFormula('=IF(K'+row+'<>"",K'+row+'-1,IF(F'+row+'<>"",F'+row+'-1,""))');        // G Call (legacy)
 }
 
-/* ---------- POST: login / book / update / delete / online ---------- */
+/* ---------- POST: login / book / update / delete / online / complete ---------- */
 function doPost(e){
   let p; try { p = JSON.parse(e.postData.contents); } catch(err){ return json({ ok:false, error:'bad request' }); }
   if(p.action === 'login') return json(login(p.user, p.pass));
@@ -107,6 +143,14 @@ function doPost(e){
   if(p.action === 'book'){
     const sheet = sheetOf(SHEET_NAME);
     if(slotTaken(sheet, p.apptDate ? fmt(p.apptDate) : '', p.slot, p.id)) return json({ ok:false, error:'slot_taken' });
+    sheet.appendRow([p.name, p.phone || '', p.visit ? new Date(p.visit) : '', p.days || '', p.type || '']);
+    const row = sheet.getLastRow();
+    setFormulas(sheet, row);
+    sheet.getRange(row, 10).setValue(p.id || ('a' + Utilities.getUuid().slice(0,10)));     // J id
+    sheet.getRange(row, 11).setValue(p.apptDate ? new Date(p.apptDate) : '');               // K appt date
+    sheet.getRange(row, 12).setValue(p.slot || '');                                         // L slot
+    sheet.getRange(row, 13).setValue(p.stage || 'Scheduled');                               // M stage
+    return json({ ok:true });
     const id = p.id || ('a' + Utilities.getUuid().slice(0,10));
     writeAppt(sheet, 0, p, id);
     return json({ ok:true, id:id });
@@ -167,6 +211,36 @@ function doPost(e){
     return json({ ok:true });
   }
 
+  if(p.action === 'complete'){
+    const sheet = sheetOf(SHEET_NAME);
+    const row = rowById(sheet, p.id);
+    if(!row) return json({ ok:false, error:'not_found' });
+    sheet.getRange(row, 13, 1, 8).setValues([[
+      p.stage || 'Completed', p.diagnosis || '', p.clinicalNotes || '', p.medDuration || '',
+      p.medNotes || '', p.followUp ? new Date(p.followUp) : '', p.outcome || '', ''
+    ]]);
+    const src = sheet.getRange(row, 1, 1, 12).getValues()[0];
+
+    if(p.autoFollowUpId && p.followUp){
+      sheet.appendRow([src[COL.name], src[COL.phone], '', '', src[COL.type]]);
+      const nrow = sheet.getLastRow();
+      setFormulas(sheet, nrow);
+      sheet.getRange(nrow, 10).setValue(p.autoFollowUpId);
+      sheet.getRange(nrow, 11).setValue(new Date(p.followUp));
+      sheet.getRange(nrow, 12).setValue('');
+      sheet.getRange(nrow, 13).setValue('Scheduled');
+      sheet.getRange(nrow, 20).setValue(p.id);
+    }
+
+    if(p.autoOnlineRecord){
+      const osheet = sheetOf(ONLINE_SHEET);
+      if(osheet.getLastRow() === 0) osheet.appendRow(['Name','Phone','Place','Consultation Date','Referred By','Notes']);
+      osheet.appendRow([src[COL.name], src[COL.phone], '', src[COL.appt] || new Date(), '', p.clinicalNotes || '']);
+    }
+
+    return json({ ok:true });
+  }
+
   return json({ ok:false, error:'unknown action' });
 }
 
@@ -222,6 +296,11 @@ function doGet(e){
       apptDate: r[COL.appt] ? fmt(r[COL.appt]) : (r[COL.due] ? fmt(r[COL.due]) : ''),
       due: r[COL.due] ? fmt(r[COL.due]) : '',
       slot: r[COL.slot] || '', days: r[COL.days] || '', status: String(r[COL.status] || ''),
+      stage: String(r[COL.stage] || '').trim() || 'Scheduled',
+      diagnosis: r[COL.diagnosis] || '', clinicalNotes: r[COL.clinicalNotes] || '',
+      medDuration: r[COL.medDuration] || '', medNotes: r[COL.medNotes] || '',
+      followUp: r[COL.followUp] ? fmt(r[COL.followUp]) : '',
+      outcome: r[COL.outcome] || '', parentId: r[COL.parentId] || ''
       notes: String(r[COL.notes] || ''), diagnosis: String(r[COL.diagnosis] || '')
     });
   }
@@ -242,7 +321,10 @@ function checkFollowUps(){
   const callToday = [], dueToday = [];
   for(let i = 1; i < data.length; i++){
     const r = data[i];
-    if(!r[COL.name] || String(r[COL.status]).trim().toLowerCase() === 'done') continue;
+    if(!r[COL.name]) continue;
+    if(String(r[COL.status]).trim().toLowerCase() === 'done') continue;          // legacy "done" flag
+    const stage = String(r[COL.stage] || '').trim();
+    if(stage === 'Completed' || stage === 'Cancelled' || stage === 'NoShow') continue;
     const type = (String(r[COL.type]).trim().toLowerCase() === 'online') ? 'Online' : 'In-clinic';
     const slot = r[COL.slot] ? (' ' + r[COL.slot]) : '';
     const who = { name:r[COL.name], phone:r[COL.phone], type:type, slot:slot };
@@ -259,15 +341,15 @@ function buildMessage(callToday, dueToday){
   let t = '';
   if(dueToday.length){
     const on = dueToday.filter(p=>p.type==='Online'), off = dueToday.filter(p=>p.type==='In-clinic');
-    t += '\uD83D\uDD34 APPOINTMENTS TODAY (' + dueToday.length + ')\n';
+    t += '🔴 APPOINTMENTS TODAY (' + dueToday.length + ')\n';
     if(on.length){ t += '\nOnline (' + on.length + ') — send the link:\n'; on.forEach((p,i)=>t+='  '+(i+1)+'. '+p.name+p.slot+'  '+p.phone+'\n'); }
     if(off.length){ t += '\nIn-clinic (' + off.length + '):\n'; off.forEach((p,i)=>t+='  '+(i+1)+'. '+p.name+p.slot+'  '+p.phone+'\n'); }
     t += '\n';
   }
   if(callToday.length){
-    t += '\uD83D\uDCDE CALL TODAY to confirm tomorrow (' + callToday.length + '):\n';
+    t += '📞 CALL TODAY to confirm tomorrow (' + callToday.length + '):\n';
     callToday.forEach((p,i)=>t+='  '+(i+1)+'. '+p.name+'  '+p.phone+'  ['+p.type+']\n');
   }
-  t += '\n\u2014 ' + CFG.clinic;
-  return { subject:'\uD83D\uDD14 '+CFG.clinic+': '+dueToday.length+' today, '+callToday.length+' to call', text:t };
+  t += '\n— ' + CFG.clinic;
+  return { subject:'🔔 '+CFG.clinic+': '+dueToday.length+' today, '+callToday.length+' to call', text:t };
 }

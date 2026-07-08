@@ -1,14 +1,31 @@
 /* Enzo Homoeo — service worker
    Caches the app shell so it opens instantly and works offline.
+   Bump CACHE when you change the shell file list so users get the update. */
    Bump CACHE when you change index.html so users get the update. */
 const CACHE = 'enzo-v6';
 const SHELL = [
   './',
   './index.html',
   './manifest.json',
+  './css/app.css',
+  './js/app.js',
+  './js/core.js',
+  './js/store.js',
+  './js/api.js',
+  './js/workflow.js',
+  './js/ui.js',
+  './js/auth.js',
+  './js/booking.js',
+  './js/consultation.js',
+  './js/online.js',
+  './js/dashboard.js',
+  './js/timeline.js',
+  './js/reminders.js',
   './assets/favicon.png',
   './assets/icon-192.png',
-  './assets/icon-512.png'
+  './assets/icon-512.png',
+  './assets/logo-horizontal.png',
+  './assets/logo-mark.png'
 ];
 
 // Install: cache each shell file individually so one miss doesn't fail install.
@@ -30,10 +47,11 @@ self.addEventListener('activate', e => {
 });
 
 // Fetch: navigations fall back to cached index when offline;
-// other GETs use cache-first, then network.
+// other GETs use cache-first, then network (with cache refresh).
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
+  if (new URL(req.url).origin !== self.location.origin && req.mode !== 'navigate') return; // never intercept the Apps Script API
 
   if (req.mode === 'navigate') {
     e.respondWith(
@@ -44,7 +62,6 @@ self.addEventListener('fetch', e => {
 
   e.respondWith(
     caches.match(req).then(hit => hit || fetch(req).then(res => {
-      // cache same-origin successful responses for next time
       if (res.ok && new URL(req.url).origin === self.location.origin) {
         const copy = res.clone();
         caches.open(CACHE).then(c => c.put(req, copy));

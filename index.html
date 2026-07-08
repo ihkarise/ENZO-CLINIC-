@@ -13,6 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="css/app.css" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.0/chart.umd.min.js"></script>
 <style>
   :root{
@@ -228,6 +229,7 @@
 </style>
 </head>
 <body>
+<div class="offlinebar" id="offlineBar" role="status" aria-live="polite">Offline</div>
 <div class="wrap">
   <main class="login" id="login">
     <div class="login-inner">
@@ -245,6 +247,7 @@
   <div id="app">
     <header class="header"><div class="header-in">
       <img class="mini" src="assets/logo-mark.png" alt="" onerror="this.outerHTML='&lt;div class=&quot;mini mini-fb&quot;&gt;E&lt;/div&gt;'"/>
+      <div class="htxt"><h2>Enzo Homoeo <span class="role-badge" id="roleBadge" hidden></span></h2><p id="hsub">Appointments</p></div>
       <div class="htxt"><div class="hrow"><h2>Enzo Homoeo</h2><span class="rolebadge" id="roleBadge" hidden></span></div><p id="hsub">Appointments</p></div>
       <div class="topactions">
         <button class="iconbtn" id="printBtn" aria-label="Print today's schedule"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg></button>
@@ -263,7 +266,7 @@
           <button class="cancel" id="editCancel">Cancel</button>
         </div>
         <div class="book-grid">
-          <div class="col-main">
+          <div class="col-main" data-perm="book">
             <div class="card card-rise">
               <div class="field"><label class="label" for="name">Patient name</label><input type="text" id="name" placeholder="e.g. Anu Thomas" autocomplete="off"/></div>
               <div class="field"><label class="label" for="phone">Phone</label><input type="tel" id="phone" placeholder="e.g. 9847 0XXXXX" autocomplete="off"/></div>
@@ -273,39 +276,19 @@
                   <button class="seg-btn" data-t="Online" aria-pressed="false"><span class="ic"></span>Online</button>
                 </div>
               </div>
-              <div class="row2">
-                <div class="field"><label class="label" for="visit">Visited on</label><input type="date" id="visit"/></div>
-                <div class="field"><label class="label" for="appt">Appointment date</label><input type="date" id="appt"/></div>
-              </div>
-              <div class="field"><span class="label">Medicine given for</span>
-                <div class="chips" id="chips" role="group" aria-label="Medicine days">
-                  <button class="chip" data-d="15">15 days</button>
-                  <button class="chip on" data-d="30">30 days</button>
-                  <button class="chip" data-d="45">45 days</button>
-                  <button class="chip" data-d="60">60 days</button>
-                  <button class="chip" data-d="90">90 days</button>
-                  <span class="chip-custom"><input type="number" id="custom" min="1" max="365" placeholder="--" aria-label="Custom days"/><span>days</span></span>
-                </div>
-              </div>
+              <div class="field"><label class="label" for="appt">Appointment date</label><input type="date" id="appt"/></div>
               <div class="field"><span class="label">Time slot</span><div id="slots"></div></div>
-            </div>
-            <div class="card card-rise">
-              <div class="tl-head"><span class="num" id="dayNum">30</span><small>days of medicine</small></div>
-              <div class="track" aria-hidden="true">
-                <div class="fill" id="fill"></div>
-                <div class="node s"><span class="tg">Visit</span><span class="dot"></span><span class="dt" id="dVisit">Today</span></div>
-                <div class="node c"><span class="tg">Call</span><span class="dot"></span><span class="dt" id="dCall">--</span></div>
-                <div class="node e"><span class="tg">Appt</span><span class="dot"></span><span class="dt" id="dAppt">--</span></div>
-              </div>
-              <div class="result">
-                <div class="res c"><div class="k">Call patient on</div><div class="v" id="callBig">--</div></div>
-                <div class="res"><div class="k">Appointment</div><div class="v" id="apptBig">--</div></div>
-              </div>
             </div>
             <button class="btn-primary book" id="book" data-state="a"><span class="t4-swap"><span class="t4-text t4-a">Book appointment</span><span class="t4-text t4-b">Saved &#10003;</span></span></button>
           </div>
           <aside class="col-side" aria-label="Appointments">
             <div class="searchbar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input type="search" id="search" placeholder="Search patients or phone" aria-label="Search appointments"/></div>
+            <div class="section-h"><h2>Appointments</h2><button class="printbtn no-print" id="printToday" data-perm="print" aria-label="Print today's schedule"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V2h12v7"/><rect x="6" y="14" width="12" height="8"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/></svg>Print today</button><span class="c" id="count"></span></div>
+            <div class="listtabs" id="listTabs" role="group" aria-label="Appointment status">
+              <button type="button" class="on" data-tab="scheduled">Scheduled</button>
+              <button type="button" data-tab="completed">Completed</button>
+            </div>
+            <div class="subchips" id="subchips" role="group" aria-label="Filter"></div>
             <div class="tabs" id="apptTabs" role="tablist">
               <button class="tab on" data-tab="scheduled" role="tab" aria-selected="true">Scheduled</button>
               <button class="tab" data-tab="completed" role="tab" aria-selected="false">Completed</button>
@@ -375,21 +358,28 @@
           <div class="refdetail" id="refDetail" hidden></div>
         </div>
       </section>
+      <section class="page" id="pageTimeline" aria-label="Patient timeline">
+        <div class="searchbar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input type="search" id="tSearch" placeholder="Search a patient by name or phone" aria-label="Search patient timeline"/></div>
+        <div id="tResults"></div>
+      </section>
     </div>
     <nav class="nav" id="nav" aria-label="Sections">
       <button class="on" data-p="pageBook" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Booking</button>
       <button data-p="pageConsult"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3v6a6 6 0 0 0 12 0V3"/><path d="M6 3H4M18 3h2"/><circle cx="20" cy="14" r="2"/><path d="M12 15v2a4 4 0 0 0 8 0v-1"/></svg>Consults</button>
       <button data-p="pageOnline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m23 7-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>Online</button>
       <button data-p="pageDash"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6"/><rect x="12" y="7" width="3" height="10"/><rect x="17" y="13" width="3" height="4"/></svg>Dashboard</button>
+      <button data-p="pageTimeline" data-perm="viewTimeline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>Timeline</button>
     </nav>
   </div>
+
   <div class="overlay" id="overlay">
-    <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <div class="mh"><div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></div><div><h3 id="modalTitle">Today</h3><p>What needs your attention</p></div></div>
       <div id="modalBody"></div>
       <button class="btn-primary" id="modalOk">Got it</button>
     </div>
   </div>
+
   <div class="overlay" id="consultOverlay">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="consultTitle" style="max-width:440px">
       <div class="mh doc"><div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v6a6 6 0 0 0 12 0V3"/><circle cx="20" cy="14" r="2"/><path d="M12 15v2a4 4 0 0 0 8 0v-1"/></svg></div><div><h3 id="consultTitle">Close visit</h3><p id="consultSub">Record outcome</p></div></div>
@@ -403,6 +393,42 @@
       <div class="btn-row"><button class="btn-ghost" id="confirmCancel">Cancel</button><button class="btn-danger" id="confirmDelete">Delete</button></div>
     </div>
   </div>
+
+  <div class="overlay" id="consultOverlay">
+    <div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="consultTitle">
+      <div class="mh ic-blue"><div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg></div><div><h3 id="consultTitle">Complete consultation</h3><p id="consultSub"></p></div></div>
+      <div class="field"><label class="label" for="cDiagnosis">Diagnosis</label><textarea id="cDiagnosis" placeholder="Diagnosis"></textarea></div>
+      <div class="field"><label class="label" for="cNotes">Clinical notes</label><textarea id="cNotes" placeholder="Observations, history, plan&hellip;"></textarea></div>
+      <div class="field"><span class="label">Medicine duration</span>
+        <div class="chips" id="cChips" role="group" aria-label="Medicine duration">
+          <button type="button" class="chip" data-d="15">15 days</button>
+          <button type="button" class="chip on" data-d="30">30 days</button>
+          <button type="button" class="chip" data-d="45">45 days</button>
+          <button type="button" class="chip" data-d="60">60 days</button>
+          <button type="button" class="chip" data-d="90">90 days</button>
+          <span class="chip-custom"><input type="number" id="cCustom" min="1" max="365" placeholder="--" aria-label="Custom days"/><span>days</span></span>
+        </div>
+      </div>
+      <div class="field"><label class="label" for="cMedNotes">Medicine notes</label><textarea id="cMedNotes" placeholder="Dosage, instructions&hellip;"></textarea></div>
+      <div class="field"><label class="label" for="cFollowUp">Follow-up date <span id="cFollowUpPreview" style="font-weight:400;color:var(--light)"></span></label><input type="date" id="cFollowUp"/></div>
+      <div class="field"><span class="label">Outcome</span>
+        <div class="outcome-seg" id="outcomeSeg" role="group" aria-label="Outcome">
+          <button type="button" class="on" data-o="Completed">Completed</button>
+          <button type="button" data-o="Cancelled">Cancelled</button>
+          <button type="button" data-o="NoShow">No show</button>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn-ghost" id="consultClose">Cancel</button>
+        <button class="btn-primary book" id="consultSave" data-state="a" style="flex:1;margin-top:0"><span class="t4-swap"><span class="t4-text t4-a">Save &amp; complete</span><span class="t4-text t4-b">Saved &#10003;</span></span></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="print-only" id="printArea"></div>
+</div>
+<script type="module" src="js/app.js"></script>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <div id="printArea" aria-hidden="true"></div>
 </div>
@@ -421,7 +447,6 @@
    Future modules (Billing, Inventory, Prescriptions, Patient Portal) register
    by adding a page section + a nav button with data-p + a PERM entry — the
    router and role gate pick them up with no core changes.
-============================================================================ */
 (function(){
 "use strict";
 
@@ -507,7 +532,6 @@ const Ui=(function(){
 
 /* ============================================================================
    Auth
-============================================================================ */
 async function doLogin(){
   var u=$('luser').value.trim(),p=$('lpass').value;
   if(!u||!p){$('loginErr').textContent='Enter username and password.';return;}
@@ -544,7 +568,6 @@ if(LIVE)$('loginHint').textContent='Enter your clinic username and password.';
 
 /* ============================================================================
    Data loading
-============================================================================ */
 function mapAppt(r){var ap=r.apptDate||r.due||r.visit;var apd=ap?new Date(ap):null;
   return {id:r.id||rid(),name:r.name,phone:r.phone||'',type:r.type==='Online'?'Online':'Offline',
     visit:r.visit?new Date(r.visit):(apd||new Date()),days:r.days||30,apptDate:apd,due:apd,
@@ -582,7 +605,6 @@ function historyFor(a){
 
 /* ============================================================================
    Booking module (Receptionist · Administrator)
-============================================================================ */
 const Booking=(function(){
   function visitDate(){var v=$('visit').value;return v?new Date(v+'T00:00:00'):new Date();}
   function setSeg(){document.querySelectorAll('#seg .seg-btn').forEach(function(x){var on=x.dataset.t===S.type;x.classList.toggle('on',on);x.setAttribute('aria-pressed',on);});}
@@ -720,7 +742,6 @@ const Booking=(function(){
 
 /* ============================================================================
    Consult module (Doctor · Administrator) — post-consultation workflow
-============================================================================ */
 const Consult=(function(){
   function scheduled(){var t0=new Date();t0.setHours(0,0,0,0);
     return S.appts.filter(function(a){return a.apptDate&&!isDone(a);})
@@ -796,7 +817,6 @@ const Consult=(function(){
 
 /* ============================================================================
    Today digest (bell + banner + modal + print)
-============================================================================ */
 function todayItems(){var now=new Date();
   return {due:S.appts.filter(function(a){return a.apptDate&&same(a.apptDate,now)&&!isDone(a);}),
           call:S.appts.filter(function(a){return a.apptDate&&same(new Date(new Date(a.apptDate).getTime()-DAY),now)&&!isDone(a);})};}
@@ -829,7 +849,6 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){['overlay',
 
 /* ============================================================================
    Router (page registry + nav) — new modules plug in via PERM + nav button
-============================================================================ */
 const Router=(function(){
   var order=['pageBook','pageConsult','pageOnline','pageDash'];
   var subs={pageBook:'Appointments',pageConsult:'Consultations',pageOnline:'Online records',pageDash:'Analytics'};
@@ -850,7 +869,6 @@ const Router=(function(){
 
 /* ============================================================================
    Online records module (Receptionist · Administrator)
-============================================================================ */
 const Online=(function(){
   function render(){var box=$('oList');S.online.sort(function(a,b){return new Date(b.date)-new Date(a.date);});
     $('oCount').textContent=S.online.length?S.online.length+' records':'';
@@ -869,7 +887,6 @@ const Online=(function(){
 
 /* ============================================================================
    Dashboard module (Doctor · Administrator)
-============================================================================ */
 const Dashboard=(function(){
   var trendChart,weekdayChart;
   var CC={navy:'#557B97',teal:'#5BC5C3',steel:'#8aa6bb',coral:'#E26D5C',green:'#2E9E6B',grid:'#eef1f4',muted:'#9aa7b3'};
