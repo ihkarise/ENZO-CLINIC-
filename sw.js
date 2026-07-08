@@ -1,6 +1,7 @@
 /* Enzo Homoeo — service worker
    Caches the app shell so it opens instantly and works offline.
    Bump CACHE when you change the shell file list so users get the update. */
+   Bump CACHE when you change index.html so users get the update. */
 const CACHE = 'enzo-v6';
 const SHELL = [
   './',
@@ -66,6 +67,6 @@ self.addEventListener('fetch', e => {
         caches.open(CACHE).then(c => c.put(req, copy));
       }
       return res;
-    }).catch(() => hit))
+    }).catch(() => hit || caches.match('./index.html')))
   );
 });
