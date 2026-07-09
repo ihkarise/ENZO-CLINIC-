@@ -855,6 +855,14 @@ resolves it — this app does not bundle Chart.js locally by design (see
 Once live, you'll periodically ship frontend and/or backend changes.
 Follow this order to avoid downtime or a stale-cache incident.
 
+> **Upgrading a live Phase 1 deployment to Phase 2?** Follow
+> [`INSTALLATION-GUIDE.md`](INSTALLATION-GUIDE.md) — it lists every changed
+> and new file and walks through the update in beginner terms. Key facts:
+> **no Google Sheet change**, **no `WEB_APP_URL` change**, and the two new
+> files `js/settings.js` and `js/theme.js` are already added to `sw.js`'s
+> `SHELL` (the cache was bumped `enzo-v6` → `enzo-v7`). The backend still
+> needs a **New version** deploy (§11.1) because `EnzoBackend.gs` changed.
+
 ### 11.1 Backend updates
 
 1. Edit `EnzoBackend.gs` in the Apps Script editor (or paste in an updated

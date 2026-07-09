@@ -172,6 +172,25 @@ Administrator manages staff logins directly in the Apps Script editor
 Administrator can open, edit, and view every appointment, consultation
 record, and online record regardless of who created it.
 
+### 4.4 Settings (Phase 2)
+Go to the **Settings** tab (only visible to Administrator). Changes are
+shared across every device once saved.
+
+- **Clinic timings** — opening time, closing time, slot duration and any
+  number of breaks. The app generates the bookable time slots from these
+  automatically; the small preview line shows how many slots per day result.
+- **Booking capacity** — a maximum number of appointments for each weekday.
+  Set a day to **0** to close the clinic that day (no slots are offered).
+  Leave a day blank to use the "Default max appointments/day" value.
+- **Appearance** — Light / Dark / System theme. This one is remembered per
+  device, so each phone/desktop keeps its own choice.
+- **Notifications** — turn the daily reminder email on or off. (The email
+  address and any WhatsApp/Telegram channels are still configured in the
+  Apps Script `CFG` block — see the deployment guide.)
+
+Press **Save settings**. A "Settings saved" message confirms it. If you are
+signed in as Reception or Doctor there is no Settings tab — this is intended.
+
 ---
 
 ## 5. End of day checklist

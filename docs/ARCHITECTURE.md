@@ -27,12 +27,15 @@ repository — what you see in the editor is what ships. This is a deliberate
 design choice: it keeps the system operable by a small clinic team without a
 dedicated ops person.
 
-The project is currently at **Phase 1 — Foundation + Workflow**: booking,
-the consultation lifecycle (diagnosis → auto follow-up → auto online
-record), the patient timeline, the dashboard, and role-gated access.
+The project is at **Phase 2 — Clinic Experience Improvements**, built on the
+**Phase 1 — Foundation + Workflow** base (booking, the consultation
+lifecycle, the patient timeline, the dashboard, role-gated access). Phase 2
+adds a dynamic scheduling engine, per-weekday booking capacity, richer
+appointment cards, a light/dark theme, a broader global search, and an
+Administrator-only Settings module (see [§23 Phase 2](#23-phase-2--clinic-experience-improvements)).
 Billing, Inventory, Prescriptions, a Patient Portal, Laboratory workflows,
-Payments and WhatsApp automation are explicitly **out of scope** for this
-phase (see [§21 Future roadmap](#21-future-roadmap)).
+Payments and WhatsApp automation remain explicitly **out of scope** (see
+[§21 Future roadmap](#21-future-roadmap)).
 
 ---
 
@@ -703,3 +706,74 @@ README) is:
   only guards the time-slot column, not the rest of the row.
 - **Legacy rows** (booked before Phase 1) have a blank `Stage` cell; the
   app treats blank as `Scheduled`. Confirmed intentional — see `MIGRATION.md`.
+
+---
+
+## 23. Phase 2 — Clinic Experience Improvements
+
+Phase 2 adds six features without changing the Google Sheet schema, the
+`WEB_APP_URL`, or any Phase 1 workflow. Everything is additive.
+
+### 23.1 New modules
+
+| File | Concern |
+|---|---|
+| `js/settings.js` | Clinic settings state, the **Dynamic Appointment Engine** (`generateSlots`), per-weekday capacity (`capacityForDay`), and the Settings page render/save. |
+| `js/theme.js` | Light/dark theme, per-device, stored in `localStorage` and applied via `data-theme` on `<html>`. |
+
+`js/core.js` gained `apptMatches(appt, query)` — the single global-search
+matcher reused by `booking.js` and `timeline.js`.
+
+### 23.2 Settings storage (no new sheet)
+
+Clinic settings are one JSON blob in a **single Script Property**
+(`APP_SETTINGS`), read via `doGet ?action=settings` and written via
+`doPost {action:'saveSettings'}`. A blank/missing property means "use
+defaults", so an un-upgraded deployment behaves exactly as in Phase 1. The
+client keeps a `localStorage` mirror (`enzo_settings_v1`) so the booking form
+can generate slots offline and before the first network load.
+
+Settings shape (JS `getDay()` weekday keys, 0=Sun…6=Sat):
+
+```json
+{
+  "openTime": "09:00", "closeTime": "20:00", "slotDuration": 30,
+  "breaks": [{ "start": "13:00", "end": "16:00" }],
+  "maxPerDay": 40,
+  "capacity": { "0": 0, "1": 40, "2": 40, "3": 40, "4": 40, "5": 40, "6": 20 },
+  "notifications": { "emailReminders": true }
+}
+```
+
+### 23.3 Dynamic Appointment Engine
+
+`generateSlots(settings)` builds the `HH:MM` slot list from open/close time,
+stepping by `slotDuration` and skipping any slot overlapping a break window.
+The Phase-1 hardcoded `SLOTS` constant is retained in `core.js` only as a
+legacy fallback; booking no longer imports it. The **default** settings
+reproduce the old 09:00–12:30 / 16:00–19:30 half-hour schedule exactly.
+
+### 23.4 Capacity enforcement (defence in depth)
+
+Per-weekday limits are checked client-side in `booking.js` (fast feedback,
+disabled slots) **and** server-side in `EnzoBackend.gs` `dayIsFull()` on
+`book`, returning `error:'day_full'` — so the cap cannot be bypassed via the
+API. A capacity of 0 = closed day. Missing capacity falls back to
+`maxPerDay`, and a missing `maxPerDay` = no limit.
+
+### 23.5 Permissions
+
+`saveSettings` is Administrator-only in **both** the client `can()` table and
+the backend `CAN` table. Reading settings (`settings`) is allowed for all
+roles because the booking form needs the slot/capacity config. The Settings
+**page** is gated with `data-perm="settings"`, which only the Administrator
+passes.
+
+### 23.6 Theme
+
+Theme is deliberately **per-device**, not part of the shared settings blob —
+the doctor's phone and reception's desktop keep independent preferences. An
+inline `<head>` script applies the saved theme before first paint to avoid a
+flash; `theme.js` then keeps "system" mode live via a `matchMedia` listener.
+All colour work is a single `[data-theme="dark"]` override block in
+`app.css` — no markup or component changes.

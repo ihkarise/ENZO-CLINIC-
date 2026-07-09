@@ -4,10 +4,13 @@ A no-build, installable PWA for booking appointments, running consultations
 and tracking patients, backed by a Google Sheet through a Google Apps
 Script web app. Static files only — deployable straight from GitHub Pages.
 
-**Phase 1 — Foundation + Workflow.** This is the appointment/consultation
-workflow foundation the clinic runs on today. Billing, Inventory,
-Prescriptions, Patient Portal, Laboratory, Payments and WhatsApp Automation
-are deliberately out of scope — see [Future extension points](#future-extension-points).
+**Phase 2 — Clinic Experience Improvements** (on top of Phase 1 —
+Foundation + Workflow). Phase 2 adds a dynamic, admin-configurable
+scheduling engine, per-weekday booking capacity, clearer appointment cards,
+a light/dark theme, a stronger global search, and an Administrator-only
+Settings module. Billing, Inventory, Prescriptions, Patient Portal,
+Laboratory, Payments and WhatsApp Automation remain out of scope — see
+[Future extension points](#future-extension-points).
 
 ## What it does
 
@@ -27,6 +30,24 @@ are deliberately out of scope — see [Future extension points](#future-extensio
   connection returns.
 - Three roles — **Receptionist**, **Doctor**, **Administrator** — gate what
   each signed-in user can do in the UI (see [Roles](#roles)).
+
+**Phase 2 additions:**
+
+- **Dynamic Appointment Engine** — time slots are generated from
+  administrator-configured opening/closing times, breaks and slot duration.
+  No hardcoded slot list. Defaults reproduce the previous schedule exactly.
+- **Appointment capacity** — per-weekday booking limits (and a default
+  max/day); a day set to 0 is treated as closed. Enforced in the UI **and**
+  server-side.
+- **Appointment cards** show Online / In-clinic / Follow-up (and Emergency,
+  future-ready) at a glance, without opening the appointment.
+- **Light / Dark theme** — per-device, remembered, applied before first
+  paint; no UI redesign.
+- **Global search** across name, phone, appointment ID, diagnosis and notes,
+  in Scheduled, Completed and the Timeline.
+- **Settings module** (Administrator only) — one place for clinic timings,
+  booking capacity, theme and notifications. Stored in a single Apps Script
+  property; **no Google Sheet change**.
 
 ## Architecture
 
@@ -48,6 +69,8 @@ js/
   dashboard.js           KPIs + charts + referred-by breakdown
   timeline.js             patient timeline
   reminders.js           bell / "today" modal
+  settings.js            (Phase 2) clinic settings + slot generation + capacity
+  theme.js               (Phase 2) light/dark theme (per-device)
   app.js                  bootstrap — the only script index.html loads
 EnzoBackend.gs          Google Apps Script backend (Sheet-backed API)
 sw.js                   service worker (offline app-shell cache)
@@ -65,7 +88,11 @@ Each module owns one concern and talks to the others only through
 |---|---|
 | Receptionist | Book, Edit, Cancel, Search, Print, Call, WhatsApp, view Timeline |
 | Doctor | Consult, Complete consultation, Diagnosis, Notes, view Timeline, Search |
-| Administrator | Everything, incl. Dashboard and future Settings |
+| Administrator | Everything, incl. Dashboard and **Settings** |
+
+Reception and Doctor can *read* clinic settings (the booking form needs the
+slot/capacity config) but only the Administrator sees the Settings page and
+can *save* changes — enforced both in the UI and in `EnzoBackend.gs`.
 
 Roles come from `EnzoBackend.gs`'s `login()`, driven by an optional
 `ROLE_<username>` Script Property. **Any user without one defaults to
@@ -93,6 +120,7 @@ See `docs/DEPLOYMENT.md` for the full walkthrough.
 
 ## Docs
 
+- [docs/INSTALLATION-GUIDE.md](docs/INSTALLATION-GUIDE.md) — **Phase 2** beginner install/upgrade, step by step
 - [docs/MIGRATION.md](docs/MIGRATION.md) — upgrading an existing production sheet/site to Phase 1
 - [docs/TESTING.md](docs/TESTING.md) — manual testing checklist
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — deploying from scratch
@@ -118,8 +146,9 @@ rewrite:
 - **WhatsApp Automation** — `checkFollowUps()` in `EnzoBackend.gs` already
   has a stubbed-out WhatsApp branch (CallMeBot); swap in a real
   provider/template without touching the rest of the backend.
-- **Settings** — Administrator role already exists in the UI; a Settings
-  page just needs to be added to the nav and gated the same way.
+- **Settings** — ✅ delivered in Phase 2 (`settings.js`, Administrator-only,
+  stored in a Script Property). New settings can be added to the same blob
+  and page without any Google Sheet change.
 
 ## Known risks
 
