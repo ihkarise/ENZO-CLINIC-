@@ -13,10 +13,6 @@ export function fmt(d){
   return new Date(d).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
 }
 
-export function fmtLong(d){
-  return new Date(d).toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-}
-
 export function same(a,b){
   return new Date(a).toDateString() === new Date(b).toDateString();
 }
@@ -29,10 +25,6 @@ export function to12h(s){
 
 export function rid(){
   return 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-}
-
-export function addDays(date, days){
-  return new Date(new Date(date).getTime() + days * DAY);
 }
 
 export function toISODate(d){

@@ -54,7 +54,7 @@ function emit(event, value){
 
 /** Role helpers — Administrator always has full access; unassigned/legacy
  *  users default to Administrator too, so existing logins never lock out. */
-export const ROLES = { RECEPTION: 'Receptionist', DOCTOR: 'Doctor', ADMIN: 'Administrator' };
+const ROLES = { RECEPTION: 'Receptionist', DOCTOR: 'Doctor', ADMIN: 'Administrator' };
 export function can(action){
   const role = state.role;
   if(role === ROLES.ADMIN) return true;

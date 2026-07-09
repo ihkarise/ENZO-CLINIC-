@@ -5,7 +5,7 @@
  * the Scheduled/Completed appointment list with search, edit, delete+undo
  * and Print Today's Schedule.
  */
-import { $, DAY, SLOTS, fmt, same, to12h, rid, escapeHtml, ICON_EDIT, ICON_DEL, ICON_DONE } from './core.js';
+import { $, SLOTS, fmt, same, to12h, rid, escapeHtml, ICON_EDIT, ICON_DEL, ICON_DONE } from './core.js';
 import { store, can } from './store.js';
 import { postAction } from './api.js';
 import { mapAppt, scheduledBucket, completedBucket, isScheduled } from './workflow.js';
@@ -295,4 +295,4 @@ export function initBooking(){
   resetForm();
 }
 
-export { resetForm as resetBookingForm, isSlotTaken };
+export { resetForm as resetBookingForm };

@@ -75,9 +75,13 @@ export async function login(user, pass){
   if(!CONFIG.WEB_APP_URL){
     return { ok: true, token: 'demo', user, role: demoRole(user) };
   }
+  // No explicit Content-Type here, matching postRaw() below: Apps Script
+  // Web Apps don't handle CORS preflight, and an explicit
+  // application/json header forces the browser to preflight the request.
+  // text/plain (fetch's default for a string body) avoids that entirely,
+  // and doPost() parses e.postData.contents as JSON regardless.
   const r = await fetch(CONFIG.WEB_APP_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action: 'login', user, pass })
   });
   const d = await r.json();
