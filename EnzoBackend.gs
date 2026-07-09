@@ -103,9 +103,22 @@ function fmt(d){ return Utilities.formatDate(new Date(d), tz(), 'yyyy-MM-dd'); }
 
 /* find the sheet row (1-based) for a given appointment id; 0 if not found */
 function rowById(sheet, id){
-  if(!id) return 0;
+  Logger.log('[CAVEMAN] rowById called with id=%s (typeof %s)', id, typeof id);
+  Logger.log('[CAVEMAN] COL.id = %s', COL.id);
+  Logger.log('[CAVEMAN] spreadsheet open = %s', SpreadsheetApp.getActiveSpreadsheet() ? SpreadsheetApp.getActiveSpreadsheet().getName() : 'NONE');
+  Logger.log('[CAVEMAN] sheet open = %s', sheet ? sheet.getName() : 'NONE');
+  if(!id) { Logger.log('[CAVEMAN] rowById: id is falsy, returning 0 immediately'); return 0; }
   const data = sheet.getDataRange().getValues();
-  for(let i = 1; i < data.length; i++){ if(String(data[i][COL.id]) === String(id)) return i + 1; }
+  let matched = false;
+  for(let i = 1; i < data.length; i++){
+    Logger.log('[CAVEMAN] row %s, col J (COL.id) raw value = %s (typeof %s), String() = "%s"', i + 1, data[i][COL.id], typeof data[i][COL.id], String(data[i][COL.id]));
+    if(String(data[i][COL.id]) === String(id)){
+      matched = true;
+      Logger.log('[CAVEMAN] MATCH at row %s', i + 1);
+      return i + 1;
+    }
+  }
+  Logger.log('[CAVEMAN] rowById finished, matched = %s', matched);
   return 0;
 }
 /* is a date+slot already used by a different, still-open appointment? */
@@ -137,6 +150,7 @@ function setFormulas(sheet, row){
 /* ---------- POST: login / book / update / delete / online / complete ---------- */
 function doPost(e){
   let p; try { p = JSON.parse(e.postData.contents); } catch(err){ return json({ ok:false, error:'bad request' }); }
+  Logger.log('[CAVEMAN] doPost action=%s p.id=%s (typeof %s)', p.action, p.id, typeof p.id);
   if(p.action === 'login') return json(login(p.user, p.pass));
   if(!authed(p.token)) return json({ ok:false, error:'unauthorized' });
   if(!allowed(p.token, p.action)) return json({ ok:false, error:'forbidden' });
