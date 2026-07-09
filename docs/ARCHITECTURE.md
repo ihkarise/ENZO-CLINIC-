@@ -32,7 +32,7 @@ the consultation lifecycle (diagnosis → auto follow-up → auto online
 record), the patient timeline, the dashboard, and role-gated access.
 Billing, Inventory, Prescriptions, a Patient Portal, Laboratory workflows,
 Payments and WhatsApp automation are explicitly **out of scope** for this
-phase (see [§16 Future roadmap](#16-future-roadmap)).
+phase (see [§21 Future roadmap](#21-future-roadmap)).
 
 ---
 
@@ -330,7 +330,7 @@ flaky mobile connection retrying a timed-out request):
 rows — the backend's single source of truth for "what column is what". If
 you ever add a column, add it to these maps and to the sheet header
 comment at the top of the file; **never insert a column in the middle** of
-either sheet (see [§9 Google Sheet schema](#9-google-sheet-schema)).
+either sheet (see [§6 Google Sheets architecture](#6-google-sheets-architecture)).
 
 ### Reminder trigger (`checkFollowUps`)
 A separate function, not wired to `doGet`/`doPost` — meant to be attached
@@ -410,7 +410,7 @@ exact backward-compatibility guarantees.
    **it is never persisted to `localStorage`,** so a signed-in session does
    not survive a page reload; staff sign in again after a refresh or after
    the tab is closed. (The offline write *queue* is the only thing kept in
-   `localStorage` — see §11.)
+   `localStorage` — see §13.)
 6. Every subsequent read (`doGet`) and write (`doPost`, except `login`
    itself) sends the token; the backend re-validates it against
    `CacheService` (`authed()`) on every single request — there is no
@@ -520,15 +520,15 @@ beyond what the optimistic local updates already show each user).
 
 ## 11. Consultation workflow
 
-See [§3 `js/consultation.js`](#js-consultationjs--complete-consultation--automation)
-above for the full mechanics. In one sentence: **the doctor never re-types
+See §3 above (`js/consultation.js`) for the full mechanics. In one
+sentence: **the doctor never re-types
 data reception already captured** — name, phone, and type carry forward
 automatically into the auto-generated follow-up appointment and the
 auto-generated online record.
 
 ## 12. Timeline workflow
 
-Purely a **read/aggregation** view — see [§3 `js/timeline.js`](#js-timelinejs--patient-timeline).
+Purely a **read/aggregation** view — see §3 above (`js/timeline.js`).
 No dedicated backend endpoint; it re-uses `appts` and `onlineRecords`
 already in the in-memory store, joined by phone number (falling back to
 lowercased name if no phone is on file). This means the timeline is only

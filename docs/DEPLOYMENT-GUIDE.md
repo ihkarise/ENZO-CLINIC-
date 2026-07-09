@@ -472,11 +472,15 @@ something in §6.7 needs fixing.
    ```
 
    Leave `whatsapp.on` and `telegram.on` as `false` unless you've actually
-   obtained a real CallMeBot API key / Telegram bot token and chat ID —
-   enabling either with the placeholder values will cause the trigger to
-   throw an error every day (see Troubleshooting §10.9) without ever
-   sending the email either, since Apps Script trigger functions stop
-   entirely on their first uncaught error.
+   obtained a real CallMeBot API key / Telegram bot token and chat ID.
+   Both calls use `muteHttpExceptions:true`, so enabling either with the
+   placeholder values will **not** crash the trigger or block the email —
+   the call to CallMeBot/Telegram just silently fails (a rejected request
+   is fetched and ignored, never thrown), so email delivery is unaffected
+   either way. The only consequence is that WhatsApp/Telegram messages
+   quietly never arrive until you put in real credentials — there is no
+   error to alert you to this, so don't enable a channel you haven't
+   actually configured, or you'll believe it's working when it isn't.
 
 6. Save and redeploy (New version, §11) if you edited `CFG` after already deploying.
 
@@ -765,7 +769,7 @@ few minutes then start failing.
 ### 10.9 Wrong Sheet
 **Symptom:** you're editing/testing against one Sheet, but the app shows
 data from a different one (or the "original" clinic's data from the
-warning in §2).
+warning in §1).
 **Fix:** confirm which Sheet the Apps Script project in §6.1 is actually
 **bound to** — a script is permanently tied to the Sheet it was created
 from (Extensions → Apps Script *from that Sheet*). If you suspect you're
@@ -1002,7 +1006,7 @@ Final sign-off — everything below should be true before this guide is "done":
 - [ ] Backend deployed and verified independently of the frontend (§6.10)
 - [ ] Frontend deployed and verified independently of the backend (§7.6)
 - [ ] Frontend correctly configured to talk to *this* deployment's backend,
-      not the placeholder URL shipped in the repo (§8, and the warning in §2)
+      not the placeholder URL shipped in the repo (§8, and the warning in §1)
 - [ ] Every item in §9's production testing pass is checked off
 - [ ] Every item in §15's production checklist is checked off
 - [ ] Whoever will operate this day-to-day has read
