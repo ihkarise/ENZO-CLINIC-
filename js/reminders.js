@@ -45,7 +45,7 @@ function buildModal(){
   $('modalTitle').textContent = n > 0 ? `Today — ${n} to handle` : 'Today';
 }
 
-export function openTodayModal(){ buildModal(); openOverlay('overlay', $('modalOk')); }
+function openTodayModal(){ buildModal(); openOverlay('overlay', $('modalOk')); }
 export function openTodayIfAny(){ const t = todayItems(); if(t.due.length + t.call.length > 0) openTodayModal(); }
 
 export function initReminders(){

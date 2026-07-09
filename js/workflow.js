@@ -55,7 +55,6 @@ export function scheduledBucket(appt, now){
 }
 
 export function isScheduled(appt){ return appt.stage === STAGE.SCHEDULED || !appt.stage; }
-export function isCompletedGroup(appt){ return !isScheduled(appt); }
 
 export function completedBucket(appt){
   if(appt.stage === STAGE.CANCELLED) return 'cancelled';

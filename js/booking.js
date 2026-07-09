@@ -5,7 +5,7 @@
  * the Scheduled/Completed appointment list with search, edit, delete+undo
  * and Print Today's Schedule.
  */
-import { $, DAY, SLOTS, fmt, same, to12h, rid, escapeHtml, ICON_EDIT, ICON_DEL, ICON_DONE } from './core.js';
+import { $, SLOTS, fmt, same, to12h, rid, escapeHtml, digits, ICON_EDIT, ICON_DEL, ICON_DONE, ICON_CALL, ICON_WA } from './core.js';
 import { store, can } from './store.js';
 import { postAction } from './api.js';
 import { mapAppt, scheduledBucket, completedBucket, isScheduled } from './workflow.js';
@@ -125,7 +125,10 @@ export function renderAppts(){
     const dd = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
     const scheduled = isScheduled(a);
     const canComplete = scheduled && can('complete');
+    const ph = digits(a.phone);
     const actions = [
+      ph && can('call') ? `<a class="iact" href="tel:${ph}" aria-label="Call ${escapeHtml(a.name)}">${ICON_CALL}</a>` : '',
+      ph && can('whatsapp') ? `<a class="iact" href="https://wa.me/${ph.replace(/^\+/, '')}" target="_blank" rel="noopener" aria-label="WhatsApp ${escapeHtml(a.name)}">${ICON_WA}</a>` : '',
       canComplete ? `<button class="iact go" data-consult="${a.id}" aria-label="Complete consultation for ${escapeHtml(a.name)}">${ICON_DONE}</button>` : '',
       scheduled && can('edit') ? `<button class="iact" data-edit="${a.id}" aria-label="Edit ${escapeHtml(a.name)}">${ICON_EDIT}</button>` : '',
       scheduled && can('cancel') ? `<button class="iact del" data-del="${a.id}" aria-label="Delete ${escapeHtml(a.name)}">${ICON_DEL}</button>` : '',
@@ -155,7 +158,9 @@ function editAppt(id){
 let navigateToBooking = () => {};
 export function setNavigator(fn){ navigateToBooking = fn; }
 
+let bookInFlight = false;
 async function saveAppt(){
+  if(bookInFlight) return; // ignore duplicate click/tap while a save is already in flight
   const name = $('name').value.trim();
   if(!name){ toast('Enter a patient name'); return; }
   if(!$('appt').value){ toast('Pick an appointment date'); return; }
@@ -173,8 +178,16 @@ async function saveAppt(){
     apptDate: $('appt').value, slot: selectedSlot,
     stage: editingId ? undefined : 'Scheduled'
   };
+  bookInFlight = true;
+  $('book').disabled = true;
   $('book').setAttribute('data-state', 'b');
-  const d = await postAction(rec);
+  let d;
+  try{
+    d = await postAction(rec);
+  }finally{
+    bookInFlight = false;
+    $('book').disabled = false;
+  }
   if(d && d.ok === false){
     toast(d.error === 'slot_taken' ? 'That slot was just taken' : 'Could not save');
     setTimeout(() => $('book').setAttribute('data-state', 'a'), 400);
@@ -295,4 +308,4 @@ export function initBooking(){
   resetForm();
 }
 
-export { resetForm as resetBookingForm, isSlotTaken };
+export { resetForm as resetBookingForm };

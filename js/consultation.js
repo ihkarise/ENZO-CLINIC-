@@ -55,8 +55,9 @@ export function openConsult(id, isView){
   openOverlay('consultOverlay', readOnly ? $('consultClose') : $('cDiagnosis'));
 }
 
+let saveInFlight = false;
 async function saveConsult(){
-  if(!currentAppt) return;
+  if(!currentAppt || saveInFlight) return; // ignore duplicate click/tap while a save is already in flight
   const diagnosis = $('cDiagnosis').value.trim();
   const clinicalNotes = $('cNotes').value.trim();
   const medNotes = $('cMedNotes').value.trim();
@@ -74,8 +75,16 @@ async function saveConsult(){
     autoOnlineRecord: stage === STAGE.COMPLETED && currentAppt.type === 'Online'
   };
 
+  saveInFlight = true;
+  $('consultSave').disabled = true;
   $('consultSave').setAttribute('data-state', 'b');
-  const d = await postAction(payload);
+  let d;
+  try{
+    d = await postAction(payload);
+  }finally{
+    saveInFlight = false;
+    $('consultSave').disabled = false;
+  }
   if(d && d.ok === false){
     toast('Could not save consultation');
     $('consultSave').setAttribute('data-state', 'a');

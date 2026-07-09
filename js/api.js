@@ -49,35 +49,49 @@ export async function postAction(body){
   }
 }
 
-/** Retry every queued write in order; stop at the first network failure so
- *  order is preserved and nothing is dropped. */
+/** Retry every queued write in order; stop at the first failure so order is
+ *  preserved and nothing is dropped. A failure is either the network still
+ *  being down (fetch throws) or the server rejecting the write
+ *  (ok:false — validation, auth, slot clash, etc). Either way the item
+ *  stays at the front of the queue for the next retry — it is never
+ *  silently discarded — and the caller is told why via the returned
+ *  `error`, so it can surface it instead of claiming a false success. */
 export async function flushQueue(onProgress){
-  if(!CONFIG.WEB_APP_URL) return { flushed: 0, remaining: 0 };
+  if(!CONFIG.WEB_APP_URL) return { flushed: 0, remaining: 0, error: null };
   let q = loadQueue();
-  if(!q.length) return { flushed: 0, remaining: 0 };
-  let flushed = 0;
+  if(!q.length) return { flushed: 0, remaining: 0, error: null };
+  let flushed = 0, error = null;
   while(q.length){
     const item = q[0];
     try{
-      await postRaw(item.body);
+      const d = await postRaw(item.body);
+      if(d && d.ok === false){
+        error = d.error || 'rejected';
+        break; // server refused it — keep it queued, stop here, let the caller know
+      }
       q.shift();
       flushed++;
       saveQueue(q);
       if(onProgress) onProgress(flushed, q.length);
     }catch(e){
+      error = 'offline';
       break; // still offline — stop, keep the rest queued
     }
   }
-  return { flushed, remaining: q.length };
+  return { flushed, remaining: q.length, error };
 }
 
 export async function login(user, pass){
   if(!CONFIG.WEB_APP_URL){
     return { ok: true, token: 'demo', user, role: demoRole(user) };
   }
+  // No explicit Content-Type here, matching postRaw() below: Apps Script
+  // Web Apps don't handle CORS preflight, and an explicit
+  // application/json header forces the browser to preflight the request.
+  // text/plain (fetch's default for a string body) avoids that entirely,
+  // and doPost() parses e.postData.contents as JSON regardless.
   const r = await fetch(CONFIG.WEB_APP_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action: 'login', user, pass })
   });
   const d = await r.json();
