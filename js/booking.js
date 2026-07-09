@@ -70,23 +70,27 @@ function badge(a){
     : '<span class="tb off"><span class="d"></span>In-clinic</span>';
 }
 
-function currentListFn(){
+function searchFilter(list){
   const q = ($('search').value || '').trim().toLowerCase();
+  if(!q) return list;
+  return list.filter(a => (a.name || '').toLowerCase().indexOf(q) >= 0 || (a.phone || '').toLowerCase().indexOf(q) >= 0);
+}
+
+function currentListFn(){
   const all = store.get('appts').filter(a => a.apptDate);
-  if(q) return all.filter(a => (a.name || '').toLowerCase().indexOf(q) >= 0 || (a.phone || '').toLowerCase().indexOf(q) >= 0);
   const tab = store.get('listTab');
   if(tab === 'scheduled'){
     const sub = store.get('scheduledSub');
-    return all.filter(a => isScheduled(a) && scheduledBucket(a) === sub);
+    return searchFilter(all.filter(a => isScheduled(a) && scheduledBucket(a) === sub));
   }
   const sub = store.get('completedSub');
-  return all.filter(a => !isScheduled(a) && completedBucket(a) === sub);
+  return searchFilter(all.filter(a => !isScheduled(a) && completedBucket(a) === sub));
 }
 
 function renderSubchips(){
   const box = $('subchips');
   const tab = store.get('listTab');
-  const all = store.get('appts').filter(a => a.apptDate);
+  const all = searchFilter(store.get('appts').filter(a => a.apptDate));
   if(tab === 'scheduled'){
     const cur = store.get('scheduledSub');
     const counts = { upcoming: 0, today: 0, pending: 0 };
