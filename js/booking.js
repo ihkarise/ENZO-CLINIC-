@@ -5,11 +5,21 @@
  * the Scheduled/Completed appointment list with search, edit, delete+undo
  * and Print Today's Schedule.
  */
-import { $, SLOTS, fmt, same, to12h, rid, escapeHtml, digits, ICON_EDIT, ICON_DEL, ICON_DONE, ICON_CALL, ICON_WA } from './core.js';
+import { $, fmt, same, to12h, rid, escapeHtml, digits, apptMatches, ICON_EDIT, ICON_DEL, ICON_DONE, ICON_CALL, ICON_WA } from './core.js';
 import { store, can } from './store.js';
 import { postAction } from './api.js';
 import { mapAppt, scheduledBucket, completedBucket, isScheduled } from './workflow.js';
+import { currentSettings, generateSlots, capacityForDay } from './settings.js';
 import { toast, confirmDialog } from './ui.js';
+
+/** Appointments still occupying a slot on a day (excludes cancelled/no-show
+ *  and, when editing, the appointment being edited). */
+function dayCount(dateStr, exceptId){
+  const d = new Date(dateStr + 'T00:00:00');
+  return store.get('appts').filter(a =>
+    a.id !== exceptId && a.apptDate && isScheduled(a) && same(a.apptDate, d)
+  ).length;
+}
 
 let onOpenConsult = null; // set by consultation.js via setConsultOpener()
 export function setConsultOpener(fn){ onOpenConsult = fn; }
@@ -38,15 +48,39 @@ function renderSlots(){
   const box = $('slots'), dateStr = $('appt').value;
   if(!dateStr){ box.innerHTML = '<div class="slotnote">Pick an appointment date first.</div>'; return; }
   const d = new Date(dateStr + 'T00:00:00');
+  const settings = currentSettings();
+  const cap = capacityForDay(settings, d.getDay());
+
+  // Clinic closed that day (capacity 0) — no booking possible.
+  if(cap === 0){ box.innerHTML = '<div class="slotnote">The clinic is closed on this day. Pick another date.</div>'; return; }
+
   const editingId = store.get('editingId');
   const taken = store.get('appts').filter(a =>
     a.id !== editingId && a.slot && a.apptDate && a.stage !== 'Cancelled' && a.stage !== 'NoShow' && same(a.apptDate, d)
   ).map(a => a.slot);
-  const avail = SLOTS.filter(s => taken.indexOf(s) < 0);
+
+  // Dynamic Appointment Engine: slots come from Settings, not a hardcoded
+  // list. Keep the appointment's own slot visible while editing even if the
+  // schedule was later changed so it no longer generates that slot.
+  let base = generateSlots(settings);
+  const editSlot = store.get('selectedSlot');
+  if(editingId && editSlot && base.indexOf(editSlot) < 0) base = base.concat([editSlot]).sort();
+
+  const avail = base.filter(s => taken.indexOf(s) < 0);
   let selectedSlot = store.get('selectedSlot');
   if(selectedSlot && avail.indexOf(selectedSlot) < 0){ selectedSlot = ''; store.set({ selectedSlot: '' }); }
+
+  // Capacity note (max appointments per weekday).
+  const used = dayCount(dateStr, editingId);
+  let capNote = '';
+  if(cap !== null){
+    const left = Math.max(0, cap - used);
+    capNote = `<div class="slotnote">${used}/${cap} booked this day · ${left} left</div>`;
+    if(left <= 0){ box.innerHTML = `<div class="slotnote">This day is full (${cap} appointments). Pick another date.</div>`; return; }
+  }
+
   const note = taken.length ? `<div class="slotnote">${taken.length} slot${taken.length > 1 ? 's' : ''} already booked this day</div>` : '';
-  box.innerHTML = note + '<div class="slotgrid">' +
+  box.innerHTML = capNote + note + '<div class="slotgrid">' +
     avail.map(s => `<button type="button" class="slot${s === selectedSlot ? ' sel' : ''}" data-s="${s}">${to12h(s)}</button>`).join('') +
     '</div>' + (avail.length ? '' : '<div class="slotnote">No free slots left on this day.</div>');
 }
@@ -61,19 +95,27 @@ function resetForm(){
   renderSlots();
 }
 
+/** At-a-glance appointment badges — shown on the card without opening it.
+ *  Status badge (stage) plus quick markers: Online / In-clinic, Follow-up
+ *  (an auto- or manually-linked follow-up appointment), and Emergency
+ *  (future-ready — rendered whenever an appointment carries the flag). */
 function badge(a){
-  if(a.stage === 'Cancelled') return '<span class="tb cancel"><span class="d"></span>Cancelled</span>';
-  if(a.stage === 'NoShow') return '<span class="tb noshow"><span class="d"></span>No-show</span>';
-  if(a.stage === 'Completed') return '<span class="tb done"><span class="d"></span>Completed</span>';
-  return a.type === 'Online'
+  const bits = [];
+  if(a.emergency) bits.push('<span class="tb emerg"><span class="d"></span>Emergency</span>');
+  if(a.stage === 'Cancelled') bits.push('<span class="tb cancel"><span class="d"></span>Cancelled</span>');
+  else if(a.stage === 'NoShow') bits.push('<span class="tb noshow"><span class="d"></span>No-show</span>');
+  else if(a.stage === 'Completed') bits.push('<span class="tb done"><span class="d"></span>Completed</span>');
+  else bits.push(a.type === 'Online'
     ? '<span class="tb on"><span class="d"></span>Online</span>'
-    : '<span class="tb off"><span class="d"></span>In-clinic</span>';
+    : '<span class="tb off"><span class="d"></span>In-clinic</span>');
+  if(a.parentId) bits.push('<span class="tb follow"><span class="d"></span>Follow-up</span>');
+  return bits.join('');
 }
 
 function searchFilter(list){
-  const q = ($('search').value || '').trim().toLowerCase();
+  const q = ($('search').value || '').trim();
   if(!q) return list;
-  return list.filter(a => (a.name || '').toLowerCase().indexOf(q) >= 0 || (a.phone || '').toLowerCase().indexOf(q) >= 0);
+  return list.filter(a => apptMatches(a, q));
 }
 
 function currentListFn(){
@@ -172,6 +214,11 @@ async function saveAppt(){
   if(!selectedSlot){ toast('Pick a time slot'); return; }
   const editingId = store.get('editingId');
   if(isSlotTaken($('appt').value, selectedSlot, editingId)){ toast('That slot is taken — pick another'); renderSlots(); return; }
+  const apptD = new Date($('appt').value + 'T00:00:00');
+  const cap = capacityForDay(currentSettings(), apptD.getDay());
+  if(cap !== null && dayCount($('appt').value, editingId) >= cap){
+    toast(cap === 0 ? 'The clinic is closed on that day' : `That day is full (${cap} appointments)`); renderSlots(); return;
+  }
 
   const id = editingId || rid();
   const type = store.get('bookingType');
@@ -193,7 +240,9 @@ async function saveAppt(){
     $('book').disabled = false;
   }
   if(d && d.ok === false){
-    toast(d.error === 'slot_taken' ? 'That slot was just taken' : 'Could not save');
+    toast(d.error === 'slot_taken' ? 'That slot was just taken'
+      : d.error === 'day_full' ? 'That day just filled up'
+      : 'Could not save');
     setTimeout(() => $('book').setAttribute('data-state', 'a'), 400);
     return;
   }

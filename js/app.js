@@ -13,10 +13,12 @@ import { initOnline, renderOnline } from './online.js';
 import { initDashboard, renderDash, setToast } from './dashboard.js';
 import { initTimeline } from './timeline.js';
 import { initReminders, refreshToday, openTodayIfAny } from './reminders.js';
+import { initSettings, renderSettings, loadSettings } from './settings.js';
+import { initTheme, setTheme } from './theme.js';
 import { toast, wireConfirmDialog, wireEscapeToClose } from './ui.js';
 
-const ORDER = ['pageBook', 'pageOnline', 'pageDash', 'pageTimeline'];
-const SUBS = { pageBook: 'Appointments', pageOnline: 'Online records', pageDash: 'Analytics', pageTimeline: 'Patient timeline' };
+const ORDER = ['pageBook', 'pageOnline', 'pageDash', 'pageTimeline', 'pageSettings'];
+const SUBS = { pageBook: 'Appointments', pageOnline: 'Online records', pageDash: 'Analytics', pageTimeline: 'Patient timeline', pageSettings: 'Settings' };
 
 function navTo(target){
   const cur = document.querySelector('.page.active');
@@ -32,6 +34,7 @@ function navTo(target){
   next.classList.add('active', fwd ? 'anim-fwd' : 'anim-back');
   $('hsub').textContent = SUBS[target] || '';
   if(target === 'pageDash') renderDash();
+  if(target === 'pageSettings') renderSettings();
 }
 
 async function loadData(){
@@ -63,8 +66,8 @@ async function enterApp(){
   applyRoleGating();
   const badge = $('roleBadge'); if(badge) badge.hidden = false;
   resetBookingForm();
-  await loadData();
-  renderAppts(); renderOnline(); refreshToday(); renderDash();
+  await Promise.all([loadData(), loadSettings()]);
+  renderAppts(); renderOnline(); refreshToday(); renderDash(); renderSettings();
   maybeFlushQueue();
   setTimeout(openTodayIfAny, 450);
 }
@@ -96,6 +99,18 @@ function initNav(){
   $('nav').addEventListener('click', e => { const b = e.target.closest('button'); if(b) navTo(b.dataset.p); });
 }
 
+/** Header quick-toggle: flip between light and dark (a resolved theme), so
+ *  one tap always visibly changes the theme. Fine-grained "follow system"
+ *  lives in Settings → Appearance. */
+function initThemeToggle(){
+  const btn = $('themeToggle');
+  if(!btn) return;
+  btn.addEventListener('click', () => {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    setTheme(isDark ? 'light' : 'dark');
+  });
+}
+
 function initLoginHint(){
   $('loginHint').textContent = isDemoMode()
     ? 'Demo mode — any username & password works.'
@@ -103,6 +118,7 @@ function initLoginHint(){
 }
 
 function init(){
+  initTheme();
   initLoginHint();
   wireConfirmDialog();
   wireEscapeToClose(['overlay', 'confirmOverlay', 'consultOverlay']);
@@ -117,6 +133,8 @@ function init(){
   initDashboard(toast);
   initTimeline();
   initReminders();
+  initSettings();
+  initThemeToggle();
   initNav();
   initOfflineIndicator();
   initAuth(enterApp);

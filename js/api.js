@@ -122,6 +122,21 @@ export async function fetchOnline(token){
   return Array.isArray(rows) ? rows : [];
 }
 
+/** Read the shared clinic settings blob. Returns the settings object, or
+ *  null when running without a backend (demo mode). */
+export async function fetchSettings(token){
+  if(!CONFIG.WEB_APP_URL) return null;
+  const r = await fetch(CONFIG.WEB_APP_URL + '?action=settings&token=' + encodeURIComponent(token));
+  const d = await r.json();
+  return (d && d.ok && d.settings) ? d.settings : {};
+}
+
+/** Save the shared clinic settings blob (Administrator only, enforced
+ *  server-side). Uses postAction so it inherits offline queueing. */
+export async function saveSettings(token, settings){
+  return postAction({ action: 'saveSettings', token, settings });
+}
+
 /* ---------- demo data (used only when WEB_APP_URL is blank) ---------- */
 export function genDemoAppts(){
   const out = [], today = new Date(), start = new Date(today);

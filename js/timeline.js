@@ -4,7 +4,7 @@
  * one chronological view. Built client-side from data already loaded by
  * booking.js/online.js — no extra backend endpoint needed for Phase 1.
  */
-import { $, fmt, escapeHtml } from './core.js';
+import { $, fmt, escapeHtml, apptMatches } from './core.js';
 import { store } from './store.js';
 import { STAGE } from './workflow.js';
 
@@ -54,7 +54,18 @@ function renderPatientList(query){
   const box = $('tResults');
   const q = query.trim().toLowerCase();
   if(!q){ box.innerHTML = '<div class="empty">Search a patient by name or phone to see their timeline.</div>'; return; }
-  const matches = allPatients().filter(p => p.name.toLowerCase().indexOf(q) >= 0 || p.phone.indexOf(q) >= 0).slice(0, 20);
+  // Global search: match on name/phone directly, or on any of the patient's
+  // appointments (ID, diagnosis, clinical/medicine notes, outcome).
+  const apptsByKey = new Map();
+  store.get('appts').forEach(a => {
+    if(!a.name) return;
+    const k = patientKey(a);
+    (apptsByKey.get(k) || apptsByKey.set(k, []).get(k)).push(a);
+  });
+  const matches = allPatients().filter(p =>
+    p.name.toLowerCase().indexOf(q) >= 0 || p.phone.indexOf(q) >= 0 ||
+    (apptsByKey.get(p.key) || []).some(a => apptMatches(a, q))
+  ).slice(0, 20);
   if(!matches.length){ box.innerHTML = '<div class="empty">No matching patients.</div>'; return; }
   box.innerHTML = matches.map(p =>
     `<div class="appt" role="button" tabindex="0" data-patient="${escapeHtml(p.key)}" style="cursor:pointer">
