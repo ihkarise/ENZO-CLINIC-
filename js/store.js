@@ -55,6 +55,11 @@ function emit(event, value){
 /** Role helpers — Administrator always has full access; unassigned/legacy
  *  users default to Administrator too, so existing logins never lock out. */
 const ROLES = { RECEPTION: 'Receptionist', DOCTOR: 'Doctor', ADMIN: 'Administrator' };
+/** UI-visibility permissions. The write-action subset (book/update/delete/
+ *  complete/online) is also enforced server-side in EnzoBackend.gs's CAN
+ *  table, so a hidden button can't be bypassed by calling the API
+ *  directly. 'dashboard' is deliberately absent from both role lists —
+ *  Dashboard is Administrator-only. */
 export function can(action){
   const role = state.role;
   if(role === ROLES.ADMIN) return true;

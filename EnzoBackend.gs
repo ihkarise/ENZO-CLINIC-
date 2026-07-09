@@ -20,6 +20,12 @@
  *
  * Stage is one of: Scheduled | Completed | Cancelled | NoShow. A blank
  * Stage cell (any row created before this update) is treated as Scheduled.
+ *
+ * ROLES: each user has USER_<name> (password hash) and, optionally,
+ * ROLE_<name> ('Receptionist' | 'Doctor' | 'Administrator' — missing role
+ * defaults to Administrator). The write endpoint enforces a per-role
+ * action allow-list (see CAN below) so a role restriction hidden in the
+ * UI can't be bypassed by calling the API directly.
  */
 
 const SHEET_NAME   = 'Appointments';
@@ -56,13 +62,30 @@ function login(user, pass){
   const stored = props.getProperty('USER_' + user);
   if(stored && stored === hash(pass)){
     const token = Utilities.getUuid();
-    CacheService.getScriptCache().put('tok_' + token, user, SESSION_SECS);
     const role = props.getProperty('ROLE_' + user) || 'Administrator';
+    CacheService.getScriptCache().put('tok_' + token, user + '|' + role, SESSION_SECS);
     return { ok:true, token:token, role:role };
   }
   return { ok:false };
 }
 function authed(token){ return token ? !!CacheService.getScriptCache().get('tok_' + token) : false; }
+/* role for a valid token, or '' if the token is invalid/expired */
+function roleForToken(token){
+  const v = token ? CacheService.getScriptCache().get('tok_' + token) : null;
+  return v ? (v.split('|')[1] || 'Administrator') : '';
+}
+/* Write actions each role may perform. Mirrors js/store.js's can() table so
+ * a hidden UI button (e.g. Complete Consultation for a Receptionist) can't
+ * be bypassed by calling the API directly. Administrator: everything. */
+const CAN = {
+  Receptionist: ['book', 'update', 'delete', 'online'],
+  Doctor: ['complete', 'online'],
+  Administrator: ['book', 'update', 'delete', 'complete', 'online']
+};
+function allowed(token, action){
+  const role = roleForToken(token);
+  return !!(role && CAN[role] && CAN[role].indexOf(action) >= 0);
+}
 function json(o){ return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 function sheetOf(name){ const ss = SpreadsheetApp.getActiveSpreadsheet(); return ss.getSheetByName(name) || ss.insertSheet(name); }
 function tz(){ return Session.getScriptTimeZone(); }
@@ -99,6 +122,7 @@ function doPost(e){
   let p; try { p = JSON.parse(e.postData.contents); } catch(err){ return json({ ok:false, error:'bad request' }); }
   if(p.action === 'login') return json(login(p.user, p.pass));
   if(!authed(p.token)) return json({ ok:false, error:'unauthorized' });
+  if(!allowed(p.token, p.action)) return json({ ok:false, error:'forbidden' });
 
   if(p.action === 'book'){
     const sheet = sheetOf(SHEET_NAME);
