@@ -71,7 +71,12 @@ async function enterApp(){
 
 function maybeFlushQueue(){
   if(!navigator.onLine) return;
-  flushQueue().then(({ flushed }) => { if(flushed) toast(`Synced ${flushed} offline change${flushed > 1 ? 's' : ''}`); });
+  flushQueue().then(({ flushed, remaining, error }) => {
+    if(flushed) toast(`Synced ${flushed} offline change${flushed > 1 ? 's' : ''}`);
+    if(remaining > 0 && error && error !== 'offline'){
+      toast(`${remaining} offline change${remaining > 1 ? 's' : ''} could not sync (${error}) — will retry`, { duration: 6000 });
+    }
+  });
 }
 
 function initOfflineIndicator(){

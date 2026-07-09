@@ -27,18 +27,28 @@ export function renderOnline(){
   }).join('');
 }
 
+let saveInFlight = false;
 export function initOnline(){
   $('oDate').value = new Date().toISOString().slice(0, 10);
   $('oSave').addEventListener('click', async () => {
+    if(saveInFlight) return; // ignore duplicate click/tap while a save is already in flight
     const name = $('oName').value.trim();
     if(!name){ toast('Enter a name'); return; }
-    $('oSave').setAttribute('data-state', 'b');
     const rec = {
       action: 'online', token: store.get('token'), name,
       place: $('oPlace').value.trim(), date: $('oDate').value || new Date().toISOString().slice(0, 10),
       refby: $('oRef').value.trim(), phone: $('oPhone').value.trim(), notes: $('oNotes').value.trim()
     };
-    const d = await postAction(rec);
+    saveInFlight = true;
+    $('oSave').disabled = true;
+    $('oSave').setAttribute('data-state', 'b');
+    let d;
+    try{
+      d = await postAction(rec);
+    }finally{
+      saveInFlight = false;
+      $('oSave').disabled = false;
+    }
     if(d && d.ok === false){ toast('Could not save'); $('oSave').setAttribute('data-state', 'a'); return; }
     const records = store.get('onlineRecords').slice();
     records.unshift({ name, place: rec.place, date: rec.date, refby: rec.refby, phone: rec.phone, notes: rec.notes });

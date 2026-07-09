@@ -158,7 +158,9 @@ function editAppt(id){
 let navigateToBooking = () => {};
 export function setNavigator(fn){ navigateToBooking = fn; }
 
+let bookInFlight = false;
 async function saveAppt(){
+  if(bookInFlight) return; // ignore duplicate click/tap while a save is already in flight
   const name = $('name').value.trim();
   if(!name){ toast('Enter a patient name'); return; }
   if(!$('appt').value){ toast('Pick an appointment date'); return; }
@@ -176,8 +178,16 @@ async function saveAppt(){
     apptDate: $('appt').value, slot: selectedSlot,
     stage: editingId ? undefined : 'Scheduled'
   };
+  bookInFlight = true;
+  $('book').disabled = true;
   $('book').setAttribute('data-state', 'b');
-  const d = await postAction(rec);
+  let d;
+  try{
+    d = await postAction(rec);
+  }finally{
+    bookInFlight = false;
+    $('book').disabled = false;
+  }
   if(d && d.ok === false){
     toast(d.error === 'slot_taken' ? 'That slot was just taken' : 'Could not save');
     setTimeout(() => $('book').setAttribute('data-state', 'a'), 400);

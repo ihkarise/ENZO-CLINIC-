@@ -9,7 +9,8 @@ import { store } from './store.js';
 import { STAGE } from './workflow.js';
 
 function patientKey(p){
-  return (p.phone && p.phone.trim()) ? 'p:' + p.phone.trim() : 'n:' + (p.name || '').trim().toLowerCase();
+  const phone = String(p.phone || '').trim();
+  return phone ? 'p:' + phone : 'n:' + (p.name || '').trim().toLowerCase();
 }
 
 function allPatients(){

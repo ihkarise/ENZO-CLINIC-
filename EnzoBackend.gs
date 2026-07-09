@@ -16,16 +16,26 @@
  *                  J ID | K Appt Date | L Slot |
  *                  M Stage | N Diagnosis | O Clinical Notes | P Medicine Duration |
  *                  Q Medicine Notes | R Follow-up Date | S Outcome | T Parent Appt ID
- *  "OnlineRecords" A Name | B Phone | C Place | D Consultation Date | E Referred By | F Notes
+ *  "OnlineRecords" A Name | B Phone | C Place | D Consultation Date | E Referred By | F Notes |
+ *                  G Source Appt ID (blank for manually-entered records; set
+ *                  only on records auto-created by 'complete', used to stop
+ *                  a retried/duplicated 'complete' call from creating a
+ *                  second record for the same consultation)
  *
  * Stage is one of: Scheduled | Completed | Cancelled | NoShow. A blank
  * Stage cell (any row created before this update) is treated as Scheduled.
  *
  * ROLES: each user has USER_<name> (password hash) and, optionally,
  * ROLE_<name> ('Receptionist' | 'Doctor' | 'Administrator' — missing role
- * defaults to Administrator). The write endpoint enforces a per-role
- * action allow-list (see CAN below) so a role restriction hidden in the
- * UI can't be bypassed by calling the API directly.
+ * defaults to Administrator). Both the write endpoint (doPost) and the
+ * read endpoint (doGet) enforce the same per-role action allow-list (see
+ * CAN below) so a restriction hidden in the UI can't be bypassed by
+ * calling the API directly.
+ *
+ * CONCURRENCY: book/update/complete each take a short script-wide lock
+ * (LockService) around their slot-availability check and the write that
+ * follows it, so two requests arriving at the same instant can't both
+ * pass the check and double-book the same date+slot.
  */
 
 const SHEET_NAME   = 'Appointments';
@@ -37,7 +47,7 @@ const COL  = {
   name:0, phone:1, visit:2, days:3, type:4, due:5, call:6, status:7, notes:8, id:9, appt:10, slot:11,
   stage:12, diagnosis:13, clinicalNotes:14, medDuration:15, medNotes:16, followUp:17, outcome:18, parentId:19
 };
-const COLO = { name:0, phone:1, place:2, date:3, refby:4, notes:5 };
+const COLO = { name:0, phone:1, place:2, date:3, refby:4, notes:5, srcId:6 };
 
 /* ===== ONE-TIME SETUP: edit users, run once, then delete this function =====
  * ROLE_<user> is optional. Any user without one defaults to Administrator
@@ -78,9 +88,9 @@ function roleForToken(token){
  * a hidden UI button (e.g. Complete Consultation for a Receptionist) can't
  * be bypassed by calling the API directly. Administrator: everything. */
 const CAN = {
-  Receptionist: ['book', 'update', 'delete', 'online'],
-  Doctor: ['complete', 'online'],
-  Administrator: ['book', 'update', 'delete', 'complete', 'online']
+  Receptionist: ['book', 'update', 'delete', 'online', 'all'],
+  Doctor: ['complete', 'online', 'all'],
+  Administrator: ['book', 'update', 'delete', 'complete', 'online', 'all']
 };
 function allowed(token, action){
   const role = roleForToken(token);
@@ -112,6 +122,13 @@ function slotTaken(sheet, dateStr, slot, exceptId){
   }
   return false;
 }
+/* has an online record already been auto-created for this source appointment? */
+function onlineHasSource(sheet, apptId){
+  if(!apptId) return false;
+  const data = sheet.getDataRange().getValues();
+  for(let i = 1; i < data.length; i++){ if(String(data[i][COLO.srcId] || '') === String(apptId)) return true; }
+  return false;
+}
 function setFormulas(sheet, row){
   sheet.getRange(row, 6).setFormula('=IF(AND(C'+row+'<>"",D'+row+'<>""),C'+row+'+D'+row+',"")');         // F Follow-up (legacy)
   sheet.getRange(row, 7).setFormula('=IF(K'+row+'<>"",K'+row+'-1,IF(F'+row+'<>"",F'+row+'-1,""))');        // G Call (legacy)
@@ -126,27 +143,39 @@ function doPost(e){
 
   if(p.action === 'book'){
     const sheet = sheetOf(SHEET_NAME);
-    if(slotTaken(sheet, p.apptDate ? fmt(p.apptDate) : '', p.slot, p.id)) return json({ ok:false, error:'slot_taken' });
-    sheet.appendRow([p.name, p.phone || '', p.visit ? new Date(p.visit) : '', p.days || '', p.type || '']);
-    const row = sheet.getLastRow();
-    setFormulas(sheet, row);
-    sheet.getRange(row, 10).setValue(p.id || ('a' + Utilities.getUuid().slice(0,10)));     // J id
-    sheet.getRange(row, 11).setValue(p.apptDate ? new Date(p.apptDate) : '');               // K appt date
-    sheet.getRange(row, 12).setValue(p.slot || '');                                         // L slot
-    sheet.getRange(row, 13).setValue(p.stage || 'Scheduled');                               // M stage
-    return json({ ok:true });
+    const lock = LockService.getScriptLock();
+    if(!lock.tryLock(10000)) return json({ ok:false, error:'busy' });
+    try{
+      if(slotTaken(sheet, p.apptDate ? fmt(p.apptDate) : '', p.slot, p.id)) return json({ ok:false, error:'slot_taken' });
+      sheet.appendRow([p.name, p.phone || '', p.visit ? new Date(p.visit) : '', p.days || '', p.type || '']);
+      const row = sheet.getLastRow();
+      setFormulas(sheet, row);
+      sheet.getRange(row, 10).setValue(p.id || ('a' + Utilities.getUuid().slice(0,10)));     // J id
+      sheet.getRange(row, 11).setValue(p.apptDate ? new Date(p.apptDate) : '');               // K appt date
+      sheet.getRange(row, 12).setValue(p.slot || '');                                         // L slot
+      sheet.getRange(row, 13).setValue(p.stage || 'Scheduled');                               // M stage
+      return json({ ok:true });
+    }finally{
+      lock.releaseLock();
+    }
   }
 
   if(p.action === 'update'){
     const sheet = sheetOf(SHEET_NAME);
-    if(slotTaken(sheet, p.apptDate ? fmt(p.apptDate) : '', p.slot, p.id)) return json({ ok:false, error:'slot_taken' });
-    const row = rowById(sheet, p.id);
-    if(!row) return json({ ok:false, error:'not_found' });
-    sheet.getRange(row, 1, 1, 5).setValues([[p.name, p.phone || '', p.visit ? new Date(p.visit) : '', p.days || '', p.type || '']]);
-    sheet.getRange(row, 11).setValue(p.apptDate ? new Date(p.apptDate) : '');
-    sheet.getRange(row, 12).setValue(p.slot || '');
-    setFormulas(sheet, row);
-    return json({ ok:true });
+    const lock = LockService.getScriptLock();
+    if(!lock.tryLock(10000)) return json({ ok:false, error:'busy' });
+    try{
+      if(slotTaken(sheet, p.apptDate ? fmt(p.apptDate) : '', p.slot, p.id)) return json({ ok:false, error:'slot_taken' });
+      const row = rowById(sheet, p.id);
+      if(!row) return json({ ok:false, error:'not_found' });
+      sheet.getRange(row, 1, 1, 5).setValues([[p.name, p.phone || '', p.visit ? new Date(p.visit) : '', p.days || '', p.type || '']]);
+      sheet.getRange(row, 11).setValue(p.apptDate ? new Date(p.apptDate) : '');
+      sheet.getRange(row, 12).setValue(p.slot || '');
+      setFormulas(sheet, row);
+      return json({ ok:true });
+    }finally{
+      lock.releaseLock();
+    }
   }
 
   if(p.action === 'delete'){
@@ -165,32 +194,44 @@ function doPost(e){
 
   if(p.action === 'complete'){
     const sheet = sheetOf(SHEET_NAME);
-    const row = rowById(sheet, p.id);
-    if(!row) return json({ ok:false, error:'not_found' });
-    sheet.getRange(row, 13, 1, 8).setValues([[
-      p.stage || 'Completed', p.diagnosis || '', p.clinicalNotes || '', p.medDuration || '',
-      p.medNotes || '', p.followUp ? new Date(p.followUp) : '', p.outcome || '', ''
-    ]]);
-    const src = sheet.getRange(row, 1, 1, 12).getValues()[0];
+    const lock = LockService.getScriptLock();
+    if(!lock.tryLock(10000)) return json({ ok:false, error:'busy' });
+    try{
+      const row = rowById(sheet, p.id);
+      if(!row) return json({ ok:false, error:'not_found' });
+      sheet.getRange(row, 13, 1, 8).setValues([[
+        p.stage || 'Completed', p.diagnosis || '', p.clinicalNotes || '', p.medDuration || '',
+        p.medNotes || '', p.followUp ? new Date(p.followUp) : '', p.outcome || '', ''
+      ]]);
+      const src = sheet.getRange(row, 1, 1, 12).getValues()[0];
 
-    if(p.autoFollowUpId && p.followUp){
-      sheet.appendRow([src[COL.name], src[COL.phone], '', '', src[COL.type]]);
-      const nrow = sheet.getLastRow();
-      setFormulas(sheet, nrow);
-      sheet.getRange(nrow, 10).setValue(p.autoFollowUpId);
-      sheet.getRange(nrow, 11).setValue(new Date(p.followUp));
-      sheet.getRange(nrow, 12).setValue('');
-      sheet.getRange(nrow, 13).setValue('Scheduled');
-      sheet.getRange(nrow, 20).setValue(p.id);
+      // idempotent: a retried/duplicated call with the same autoFollowUpId
+      // must not create a second follow-up appointment.
+      if(p.autoFollowUpId && p.followUp && !rowById(sheet, p.autoFollowUpId)){
+        sheet.appendRow([src[COL.name], src[COL.phone], '', '', src[COL.type]]);
+        const nrow = sheet.getLastRow();
+        setFormulas(sheet, nrow);
+        sheet.getRange(nrow, 10).setValue(p.autoFollowUpId);
+        sheet.getRange(nrow, 11).setValue(new Date(p.followUp));
+        sheet.getRange(nrow, 12).setValue('');
+        sheet.getRange(nrow, 13).setValue('Scheduled');
+        sheet.getRange(nrow, 20).setValue(p.id);
+      }
+
+      // idempotent: a retried/duplicated call must not create a second
+      // online record for the same source appointment.
+      if(p.autoOnlineRecord){
+        const osheet = sheetOf(ONLINE_SHEET);
+        if(osheet.getLastRow() === 0) osheet.appendRow(['Name','Phone','Place','Consultation Date','Referred By','Notes','Source Appt ID']);
+        if(!onlineHasSource(osheet, p.id)){
+          osheet.appendRow([src[COL.name], src[COL.phone], '', src[COL.appt] || new Date(), '', p.clinicalNotes || '', p.id]);
+        }
+      }
+
+      return json({ ok:true });
+    }finally{
+      lock.releaseLock();
     }
-
-    if(p.autoOnlineRecord){
-      const osheet = sheetOf(ONLINE_SHEET);
-      if(osheet.getLastRow() === 0) osheet.appendRow(['Name','Phone','Place','Consultation Date','Referred By','Notes']);
-      osheet.appendRow([src[COL.name], src[COL.phone], '', src[COL.appt] || new Date(), '', p.clinicalNotes || '']);
-    }
-
-    return json({ ok:true });
   }
 
   return json({ ok:false, error:'unknown action' });
@@ -200,6 +241,7 @@ function doPost(e){
 function doGet(e){
   const q = e.parameter || {};
   if(!authed(q.token)) return json({ ok:false, error:'unauthorized' });
+  if(!allowed(q.token, q.action || 'all')) return json({ ok:false, error:'forbidden' });
 
   if(q.action === 'online'){
     const sheet = sheetOf(ONLINE_SHEET);
