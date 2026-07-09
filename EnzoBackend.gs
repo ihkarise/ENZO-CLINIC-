@@ -72,17 +72,24 @@ function login(user, pass){
   const stored = props.getProperty('USER_' + user);
   if(stored && stored === hash(pass)){
     const token = Utilities.getUuid();
-    const role = props.getProperty('ROLE_' + user) || 'Administrator';
+    const role = normalizeRole(props.getProperty('ROLE_' + user) || 'Administrator');
     CacheService.getScriptCache().put('tok_' + token, user + '|' + role, SESSION_SECS);
     return { ok:true, token:token, role:role };
   }
   return { ok:false };
 }
 function authed(token){ return token ? !!CacheService.getScriptCache().get('tok_' + token) : false; }
+/* normalize a raw role string (any case/whitespace, e.g. " doctor", "DOCTOR")
+ * to its canonical CAN table key. Falls back to the raw value if unrecognized. */
+function normalizeRole(raw){
+  const key = String(raw || '').trim().toLowerCase();
+  const map = { receptionist: 'Receptionist', doctor: 'Doctor', administrator: 'Administrator' };
+  return map[key] || raw;
+}
 /* role for a valid token, or '' if the token is invalid/expired */
 function roleForToken(token){
   const v = token ? CacheService.getScriptCache().get('tok_' + token) : null;
-  return v ? (v.split('|')[1] || 'Administrator') : '';
+  return v ? normalizeRole(v.split('|')[1] || 'Administrator') : '';
 }
 /* Write actions each role may perform. Mirrors js/store.js's can() table so
  * a hidden UI button (e.g. Complete Consultation for a Receptionist) can't
