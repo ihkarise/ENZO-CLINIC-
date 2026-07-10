@@ -11,7 +11,7 @@ import { postAction } from './api.js';
 import { mapAppt, scheduledBucket, completedBucket, isScheduled } from './workflow.js';
 import { currentSettings, generateSlots, capacityForDay } from './settings.js';
 import { toast, confirmDialog } from './ui.js';
-import { findPatientByPhone, patientSummary, createNewPatient, apptSearchMatches } from './patients.js';
+import { findPatientByPhone, patientById, patientSummary, createNewPatient, apptSearchMatches } from './patients.js';
 
 /** Appointments still occupying a slot on a day (excludes cancelled/no-show
  *  and, when editing, the appointment being edited). */
@@ -288,10 +288,29 @@ async function saveAppt(){
   // time this phone/name is seen) create one now so the OPD number exists
   // before the appointment does. Editing an existing appointment never
   // changes who it belongs to.
+  //
+  // patientId is used for the LOCAL optimistic record straight away (so
+  // the Timeline groups it correctly even before anything syncs).
+  // patientPending tracks whether that ID is only a local placeholder (the
+  // patient itself hasn't been confirmed by the server yet — offline, or a
+  // network hiccup). A pending ID must never be sent to the server: this
+  // book/update payload may itself get queued offline, and if it carries a
+  // placeholder ID, that ID would be written into Appointments verbatim
+  // once replayed — permanently orphaning the appointment, since the real
+  // patient created by the paired createPatient write has a *different*,
+  // server-generated ID that this payload was serialized before knowing.
+  // Omitting patientId lets the server's own phone-based lookup resolve
+  // the real patient once the createPatient write (queued ahead of this
+  // one) has landed.
   let patientId = editingId ? editPatientId : '';
-  if(!editingId){
+  let patientPending = false;
+  if(editingId){
+    const existing = patientById(editPatientId);
+    patientPending = !!(existing && existing.pending);
+  }else{
     if(dupMatch && dupDecision !== 'new'){
       patientId = dupMatch.patientId;
+      patientPending = !!dupMatch.pending;
     }else{
       const patient = await createNewPatient(store.get('token'), { name, phone });
       if(!patient){
@@ -301,12 +320,13 @@ async function saveAppt(){
         return;
       }
       patientId = patient.patientId;
+      patientPending = !!patient.pending;
     }
   }
 
   const rec = {
     action: editingId ? 'update' : 'book', token: store.get('token'), id,
-    name, phone, type, patientId,
+    name, phone, type, patientId: patientPending ? '' : patientId,
     apptDate: $('appt').value, slot: selectedSlot,
     stage: editingId ? undefined : 'Scheduled'
   };

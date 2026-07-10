@@ -44,6 +44,19 @@ export function indexApptsByPatient(){
   return map;
 }
 
+/** Same as indexApptsByPatient() but for Online Records — pass both into
+ *  patientMatches() when scanning many patients so a match on an online
+ *  record's notes/place/referred-by is found too, not just appointments. */
+export function indexOnlineByPatient(){
+  const map = new Map();
+  store.get('onlineRecords').forEach(r => {
+    if(!r.patientId) return;
+    const list = map.get(r.patientId);
+    if(list) list.push(r); else map.set(r.patientId, [r]);
+  });
+  return map;
+}
+
 /** Every appointment + online record for one patient. Cheap for a single
  *  patient (used by the Timeline detail view and the duplicate-detection
  *  prompt); for scanning many patients at once, build the indexes above
@@ -119,17 +132,22 @@ export async function createNewPatient(token, fields){
 
 /** Global patient search: Patient ID, OPD Number, Name, Phone, Notes, plus
  *  (via that patient's appointments) Diagnosis / Clinical / Medicine notes
- *  / Outcome — the same fields apptMatches() already covers for a single
- *  appointment. Pass an apptsByPatient index (indexApptsByPatient()) when
- *  filtering a whole list so this stays O(n), not O(n²). */
-export function patientMatches(patient, query, apptsByPatient){
+ *  / Outcome, and (via that patient's online records) Notes / Place /
+ *  Referred By — the same fields apptMatches()/onlineSearchMatches()
+ *  already cover for a single record. Pass indexApptsByPatient()'s and
+ *  indexOnlineByPatient()'s maps when filtering a whole list so this stays
+ *  O(n), not O(n²). */
+export function patientMatches(patient, query, apptsByPatient, onlineByPatient){
   const q = String(query || '').trim().toLowerCase();
   if(!q) return true;
   const hay = [patient.patientId, patient.opdNumber, patient.name, patient.phone, patient.notes]
     .map(x => String(x || '').toLowerCase()).join('  ');
   if(hay.indexOf(q) >= 0) return true;
   const appts = apptsByPatient ? (apptsByPatient.get(patient.patientId) || []) : recordsFor(patient.patientId).appts;
-  return appts.some(a => [a.diagnosis, a.clinicalNotes, a.medNotes, a.outcome]
+  if(appts.some(a => [a.diagnosis, a.clinicalNotes, a.medNotes, a.outcome]
+    .some(f => String(f || '').toLowerCase().indexOf(q) >= 0))) return true;
+  const online = onlineByPatient ? (onlineByPatient.get(patient.patientId) || []) : recordsFor(patient.patientId).online;
+  return online.some(r => [r.notes, r.place, r.refby]
     .some(f => String(f || '').toLowerCase().indexOf(q) >= 0));
 }
 

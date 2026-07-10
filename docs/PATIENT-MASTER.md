@@ -106,9 +106,8 @@ notices which rows don't yet have a Patient ID and, in the background:
 
 1. Groups those rows by phone number (the same rule the booking desk uses
    — an exact phone match).
-2. Creates one Patient Master row per distinct phone number found (or per
-   distinct name, for the rare row with no phone at all), each getting the
-   next OPD Number in sequence.
+2. Creates one Patient Master row per distinct phone number found, each
+   getting the next OPD Number in sequence.
 3. Writes the matching Patient ID back onto every appointment and online
    record row.
 
@@ -117,6 +116,15 @@ This runs **once**, ever — a flag is saved so it never repeats. It only
 reorders anything else in your sheet. No old data is lost. If two rows
 already have the exact same phone number, they become the same patient —
 which is the whole point of this update.
+
+**A row with no phone number on file always becomes its own new patient
+— there is no name-matching fallback.** Matching is phone-only, on
+purpose (matching by name risks merging two different real people who
+happen to share one). If your old records include a lot of walk-ins or
+online leads with no phone recorded, expect the Patients tab and the OPD
+sequence to grow by roughly one entry per such row — this is normal, not
+a bug, and doesn't lose or corrupt anything; it just means those old rows
+can't be told apart from each other automatically.
 
 **A note on accuracy:** the migration can only match on what the data
 already has. If the same patient's old rows used two *different* phone

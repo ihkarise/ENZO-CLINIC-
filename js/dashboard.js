@@ -6,7 +6,7 @@
  */
 import { $, escapeHtml } from './core.js';
 import { store } from './store.js';
-import { indexApptsByPatient, patientMatches } from './patients.js';
+import { indexApptsByPatient, indexOnlineByPatient, patientMatches } from './patients.js';
 
 const CC = { navy:'#557B97', teal:'#5BC5C3', steel:'#8aa6bb', coral:'#E26D5C', green:'#2E9E6B', grid:'#eef1f4', muted:'#9aa7b3' };
 const WD = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'], MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -123,8 +123,9 @@ function renderDashSearch(){
   const q = ($('dashSearch').value || '').trim();
   if(!q){ box.hidden = true; box.innerHTML = ''; return; }
   const apptsByPatient = indexApptsByPatient();
+  const onlineByPatient = indexOnlineByPatient();
   const matches = store.get('patients')
-    .filter(p => patientMatches(p, q, apptsByPatient))
+    .filter(p => patientMatches(p, q, apptsByPatient, onlineByPatient))
     .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
     .slice(0, 6);
   box.hidden = false;
@@ -183,14 +184,22 @@ export function renderDash(){
 
 export function initDashboard(toastFn){
   toast_ = toastFn;
-  $('dashSearch').addEventListener('input', renderDashSearch);
+  // Debounced for the same reason as the Timeline search — avoids
+  // rebuilding the patient indexes and re-scanning every patient on every
+  // keystroke.
+  let dashSearchTimer = null;
+  $('dashSearch').addEventListener('input', () => {
+    clearTimeout(dashSearchTimer);
+    dashSearchTimer = setTimeout(renderDashSearch, 250);
+  });
   $('dashSearchResults').addEventListener('click', e => {
     const b = e.target.closest('[data-dpatient]'); if(!b || !onOpenTimeline) return;
     onOpenTimeline(b.getAttribute('data-dpatient'));
   });
   $('dashSearchResults').addEventListener('keydown', e => {
-    if(e.key !== 'Enter') return;
+    if(e.key !== 'Enter' && e.key !== ' ') return;
     const b = e.target.closest('[data-dpatient]'); if(!b || !onOpenTimeline) return;
+    e.preventDefault();
     onOpenTimeline(b.getAttribute('data-dpatient'));
   });
   $('dseg').addEventListener('click', e => {

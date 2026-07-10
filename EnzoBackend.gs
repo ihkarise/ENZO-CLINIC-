@@ -113,12 +113,23 @@ function nextOpdNumber(){
  *  (book / online / a legacy caller with no patientId) needs to resolve
  *  one. Exact-phone match only (name is never used to merge two different
  *  phone numbers into one patient — that would risk merging two real
- *  people). Caller must hold the script lock. */
-function findOrCreatePatient(name, phone){
+ *  people). An optional providedId is trusted only if it is verified to
+ *  exist in Patients — a stale/placeholder/corrupted ID (e.g. a client's
+ *  offline-optimistic ID that was never actually created on the server)
+ *  is never written to a row; it silently falls through to the normal
+ *  phone-match-or-create path instead, exactly as if none was supplied.
+ *  This is what guarantees an appointment can never end up pointing at a
+ *  Patient ID that doesn't exist. Caller must hold the script lock. */
+function findOrCreatePatient(name, phone, providedId){
   const sheet = sheetOf(PATIENTS_SHEET);
   ensurePatientsHeader(sheet);
-  const ph = normPhone(phone);
   const data = sheet.getDataRange().getValues();
+  if(providedId){
+    for(let i = 1; i < data.length; i++){
+      if(String(data[i][COLP.id]) === String(providedId)) return providedId;
+    }
+  }
+  const ph = normPhone(phone);
   if(ph){
     for(let i = 1; i < data.length; i++){
       if(normPhone(data[i][COLP.phone]) === ph) return data[i][COLP.id];
@@ -338,7 +349,7 @@ function doPost(e){
   if(p.action === 'book'){
     const sheet = sheetOf(SHEET_NAME);
     const lock = LockService.getScriptLock();
-    if(!lock.tryLock(10000)) return json({ ok:false, error:'busy' });
+    if(!lock.tryLock(20000)) return json({ ok:false, error:'busy' });
     try{
       const dateStr = p.apptDate ? fmt(p.apptDate) : '';
       if(dateStr && dayIsFull(sheet, dateStr, p.id)) return json({ ok:false, error:'day_full' });
@@ -346,10 +357,11 @@ function doPost(e){
       // Phase 3: every appointment links to a permanent patient. The
       // client resolves this itself when it already knows the patient
       // (returning-patient match, or a fresh createPatient call); if it
-      // doesn't send one (older client, or a direct API call) fall back to
-      // the same phone-match-or-create logic so no appointment is ever
-      // left unlinked.
-      const patientId = p.patientId || findOrCreatePatient(p.name, p.phone);
+      // doesn't send one, or sends a stale/placeholder one (an
+      // offline-queued write whose local ID never became real), fall back
+      // to the same phone-match-or-create logic so no appointment is ever
+      // left pointing at a Patient ID that doesn't exist.
+      const patientId = findOrCreatePatient(p.name, p.phone, p.patientId);
       sheet.appendRow([p.name, p.phone || '', p.visit ? new Date(p.visit) : '', p.days || '', p.type || '']);
       const row = sheet.getLastRow();
       setFormulas(sheet, row);
@@ -367,7 +379,7 @@ function doPost(e){
   if(p.action === 'update'){
     const sheet = sheetOf(SHEET_NAME);
     const lock = LockService.getScriptLock();
-    if(!lock.tryLock(10000)) return json({ ok:false, error:'busy' });
+    if(!lock.tryLock(20000)) return json({ ok:false, error:'busy' });
     try{
       if(slotTaken(sheet, p.apptDate ? fmt(p.apptDate) : '', p.slot, p.id)) return json({ ok:false, error:'slot_taken' });
       const row = rowById(sheet, p.id);
@@ -376,9 +388,10 @@ function doPost(e){
       sheet.getRange(row, 11).setValue(p.apptDate ? new Date(p.apptDate) : '');
       sheet.getRange(row, 12).setValue(p.slot || '');
       // Patient identity does not change on an ordinary edit. Only touch
-      // column U if the client explicitly sends a patientId (e.g. it was
-      // blank on a pre-Phase-3 row and got resolved on load).
-      if(p.patientId) sheet.getRange(row, 21).setValue(p.patientId);
+      // column U if the client explicitly sends a patientId — and even
+      // then, verify/resolve it the same way book does, so a stale or
+      // invalid client-supplied ID can never overwrite a correct link.
+      if(p.patientId) sheet.getRange(row, 21).setValue(findOrCreatePatient(p.name, p.phone, p.patientId));
       setFormulas(sheet, row);
       return json({ ok:true });
     }finally{
@@ -395,16 +408,27 @@ function doPost(e){
 
   if(p.action === 'online'){
     const sheet = sheetOf(ONLINE_SHEET);
-    if(sheet.getLastRow() === 0) sheet.appendRow(['Name','Phone','Place','Consultation Date','Referred By','Notes','','Patient ID']);
-    const patientId = p.patientId || findOrCreatePatient(p.name, p.phone);
-    sheet.appendRow([p.name, p.phone || '', p.place || '', p.date ? new Date(p.date) : '', p.refby || '', p.notes || '', '', patientId]);
-    return json({ ok:true, patientId:patientId });
+    // Locked like book/update/complete/createPatient: without this, two
+    // simultaneous online-record writes for the same new phone number can
+    // both miss each other's not-yet-committed row (creating two patients
+    // for one phone) and can both read the OPD sequence before either
+    // writes it back (handing out the same OPD number twice).
+    const lock = LockService.getScriptLock();
+    if(!lock.tryLock(20000)) return json({ ok:false, error:'busy' });
+    try{
+      if(sheet.getLastRow() === 0) sheet.appendRow(['Name','Phone','Place','Consultation Date','Referred By','Notes','','Patient ID']);
+      const patientId = findOrCreatePatient(p.name, p.phone, p.patientId);
+      sheet.appendRow([p.name, p.phone || '', p.place || '', p.date ? new Date(p.date) : '', p.refby || '', p.notes || '', '', patientId]);
+      return json({ ok:true, patientId:patientId });
+    }finally{
+      lock.releaseLock();
+    }
   }
 
   if(p.action === 'createPatient'){
     const sheet = sheetOf(PATIENTS_SHEET);
     const lock = LockService.getScriptLock();
-    if(!lock.tryLock(10000)) return json({ ok:false, error:'busy' });
+    if(!lock.tryLock(20000)) return json({ ok:false, error:'busy' });
     try{
       // Unconditional create — no dedup check here. This is what powers
       // "Create New Anyway" in the booking duplicate-detection prompt: the
@@ -429,7 +453,7 @@ function doPost(e){
   if(p.action === 'complete'){
     const sheet = sheetOf(SHEET_NAME);
     const lock = LockService.getScriptLock();
-    if(!lock.tryLock(10000)) return json({ ok:false, error:'busy' });
+    if(!lock.tryLock(20000)) return json({ ok:false, error:'busy' });
     try{
       const row = rowById(sheet, p.id);
       if(!row) return json({ ok:false, error:'not_found' });
@@ -438,8 +462,8 @@ function doPost(e){
         p.medNotes || '', p.followUp ? new Date(p.followUp) : '', p.outcome || '', ''
       ]]);
       const src = sheet.getRange(row, 1, 1, 21).getValues()[0];
-      const patientId = src[COL.patientId] || findOrCreatePatient(src[COL.name], src[COL.phone]);
-      if(!src[COL.patientId]) sheet.getRange(row, 21).setValue(patientId);
+      const patientId = findOrCreatePatient(src[COL.name], src[COL.phone], src[COL.patientId]);
+      if(patientId !== src[COL.patientId]) sheet.getRange(row, 21).setValue(patientId);
 
       // idempotent: a retried/duplicated call with the same autoFollowUpId
       // must not create a second follow-up appointment.

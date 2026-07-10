@@ -3,7 +3,7 @@
 **Project:** Enzo Homoeo Medical Centre Clinic App
 **Phase:** 3 — Patient Master + Unique Patient ID + Timeline Foundation
 **Base:** Phase 2 — Clinic Experience Improvements (unchanged, fully preserved), Phase 1 — Foundation + Workflow (unchanged, fully preserved)
-**Status:** ✅ Complete — all features developed, tested end-to-end (including against a real, non-demo backend), documented, and audited.
+**Status:** ✅ Complete — all features developed, tested end-to-end (including against a real, non-demo backend), documented, and audited. This report was updated after a second, adversarial CTO-level production review (§13) found two Critical, one High and four Medium defects in the state described below; all were fixed and re-verified. §7, §8, §9, §10 and §12 have been corrected in place where the original claims were wrong — see §13 for the full, honest account of what was actually broken and what changed.
 
 ---
 
@@ -119,7 +119,7 @@ Full click-by-click walkthrough: [`docs/INSTALLATION-GUIDE.md`](docs/INSTALLATIO
 |---|---|---|
 | Architecture | New concern isolated into `patients.js`; every other module consumes it via small exported functions, same pattern as `settings.js`/`theme.js` in Phase 2. | ✅ Consistent. |
 | Identity correctness | Matching must be exact-phone only, never name — merging by name risks two different people becoming one patient. | ✅ `normPhone()` mirrored identically client/server; no name-based merge path exists anywhere. |
-| Concurrency | Two simultaneous bookings could theoretically be allocated the same OPD Number. | ✅ OPD allocation (`nextOpdNumber`) always happens under the same `LockService` lock already used for `book`/`update`/`complete`. |
+| Concurrency | Two simultaneous bookings could theoretically be allocated the same OPD Number. | **Corrected in §13 (C2):** this was true for `book`/`update`/`complete`/`createPatient`, but the `online` action had no lock at all — a genuine gap this row originally missed. Fixed; see §13. |
 | Performance | Naive per-patient re-filtering of appointments during search would be O(patients × appointments). | ✅ `indexApptsByPatient()` builds one `Map` per search call; Timeline/Dashboard search read from it — O(n), not O(n²). Verified no other O(n²) pattern introduced. |
 | Performance | Migration writing one cell at a time would be slow at thousands of rows. | ✅ Rewritten to three batched `setValues()` calls total. |
 | Security | New render paths (duplicate card, profile card, dashboard search results). | ✅ All new innerHTML paths route through `escapeHtml()`; the duplicate card itself uses `textContent`, not innerHTML, for patient data. |
@@ -128,7 +128,7 @@ Full click-by-click walkthrough: [`docs/INSTALLATION-GUIDE.md`](docs/INSTALLATIO
 | Dead code | An `indexOnlineByPatient()` helper was added defensively but never called. | ✅ Found via static usage-scan, removed before commit. |
 | CSS correctness | `.dupchip[hidden]` was silently *not* hiding — its base class's `display:inline-flex` (equal specificity, author stylesheet) beat the browser's default `[hidden]{display:none}` rule. | ✅ Found via live browser testing (the edit-mode-suppression check), fixed with an explicit `.dupchip[hidden]{display:none}` rule — the same guard this codebase already uses for `.editbanner`. |
 | Demo mode | `createNewPatient()` initially returned `null` in demo mode (`postAction` short-circuits to `{ok:true, demo:true}` with no `.patient`), breaking "Create new anyway" and first-time booking entirely in demo mode. | ✅ Found via live browser testing, fixed — demo mode now resolves a fully-formed local patient immediately (no "pending" state, since demo mode never syncs). |
-| Offline queue | A patient created while offline needs its temporary local ID reconciled to the server's real Patient ID/OPD Number once synced. | ✅ Verified end-to-end against a real (mock) backend: offline booking shows "Pending sync" immediately, `maybeFlushQueue()`'s post-flush re-fetch replaces it with the real `ENZO-000001` OPD Number with no manual reload. |
+| Offline queue | A patient created while offline needs its temporary local ID reconciled to the server's real Patient ID/OPD Number once synced. | **Corrected in §13 (C1):** the original verification only checked that a patient with the right OPD Number *existed* after sync — it never checked that the *appointment* actually ended up linked to it. It didn't: the appointment's `book`/`update` payload carried the client's placeholder ID, which the server trusted unconditionally, permanently orphaning the appointment. Fixed on both client and server; see §13. |
 
 ---
 
@@ -150,7 +150,7 @@ both queued offline, then synced.
 | 6 | Changed phone (new phone, same person, not yet re-linked) | Documented, expected limitation — treated as a new patient unless merged by hand | ✅ Behaves as documented; merge procedure documented in `PATIENT-MASTER.md`/runbook §4.1a |
 | 7 | Editing an existing appointment | Duplicate card/chip never appears, even with phone in the field | ✅ PASS (found+fixed the `[hidden]` CSS bug during this test) |
 | 8 | Online consultation (standalone Online Record) | Gets a `patientId` silently, no prompt; groups correctly in Timeline | ✅ PASS |
-| 9 | Offline consultation / booking | Optimistic UI, "Saved offline — will sync" toast | ✅ PASS |
+| 9 | Offline consultation / booking | Optimistic UI, "Saved offline — will sync" toast | ✅ PASS (the toast/optimistic-UI behavior was always correct; what was *not* correct until §13's fix was the appointment's server-side patient linkage after sync — see test 19) |
 | 10 | Timeline search by OPD Number | Finds the right patient | ✅ PASS |
 | 11 | Timeline search by name/phone/diagnosis/notes | Finds the right patient(s) | ✅ PASS |
 | 12 | Patient Profile card fields | OPD, Name, Phone, Age (— when no DOB), Gender (—), Visit Count, Last Visit all correct | ✅ PASS |
@@ -158,19 +158,28 @@ both queued offline, then synced.
 | 14 | Global search — Online Records (new search box) | Filters correctly; "No matches" state works | ✅ PASS |
 | 15 | Global search — Dashboard (new quick-search) | Finds patient, click jumps to their Timeline | ✅ PASS |
 | 16 | Duplicate detection | Never silently creates a duplicate on the default path | ✅ PASS |
-| 17 | Migration | Pre-existing rows without Patient ID get linked automatically on first load; batched writes confirmed in code review | ✅ PASS (design verified; full-scale sheet migration requires a live Apps Script deployment — see §11) |
+| 17 | Migration | Pre-existing rows without Patient ID get linked automatically on first load; batched writes confirmed in code review | ✅ PASS (design verified; full-scale sheet migration requires a live Apps Script deployment — see §11); §13 additionally found and fixed a lock-contention risk during a large migration |
 | 18 | Role permissions | Receptionist/Administrator can create patients server-side (`CAN` table); all three roles can read | ✅ PASS (code-reviewed against existing role-gating pattern) |
-| 19 | Offline queue — new appointment + new patient together | Both queue in order; sync resolves the real Patient ID via phone match; UI shows "Pending sync" until then | ✅ PASS (verified against a mock backend: `Pending sync` → `ENZO-000001` after sync, zero console errors) |
+| 19 | Offline queue — new appointment + new patient together | Both queue in order; sync resolves the real Patient ID via phone match; the appointment itself must end up linked to the real patient, not just show a plausible OPD number in the patient list | ❌ **FAIL at the time this table was first written** — the appointment was permanently orphaned (see §13, C1). Re-tested after the fix with the harder two-appointments-offline-for-one-new-patient case: ✅ **PASS** — both appointments correctly appear under the one real patient's Timeline (`ENZO-000001`), visit count 2, zero orphaned references. |
 | 20 | Capacity (Phase 2 regression) | Closed/full-day rules still enforced after Phase 3 changes | ✅ PASS |
 | 21 | Settings save + Dynamic Appointment Engine (Phase 2 regression) | Save persists; booking slots regenerate correctly | ✅ PASS |
 | 22 | Theme toggle (Phase 2 regression) | Light/dark toggles correctly | ✅ PASS |
 | 23 | Load app — module graph | No runtime errors (only external CDN/font requests blocked by the sandbox's network policy — unrelated to app code) | ✅ PASS |
 
-**Two real bugs found and fixed during this QA pass** (both listed in §7):
-the `.dupchip[hidden]` CSS specificity bug, and demo-mode's
+**Two real bugs were found and fixed during this original QA pass** (both
+listed in §7): the `.dupchip[hidden]` CSS specificity bug, and demo-mode's
 `createNewPatient()` returning `null`. Both would have been visible to a
-real user on day one had they shipped — this is exactly why live
-browser-driven testing (not just static review) was run.
+real user on day one had they shipped.
+
+**That QA pass was still not thorough enough.** A subsequent adversarial
+review (§13) found that test 19 above was a false PASS — it checked the
+wrong thing (a patient record existing) instead of the thing that actually
+mattered (the appointment being linked to it), and missed a real,
+reproducible concurrency bug in the `online` action entirely. Both are
+fixed and re-verified; see §13 for the full account, including a third bug
+(in `js/online.js`, not part of the original 9 findings) that the
+adversarial review's own regression pass surfaced and that is also now
+fixed.
 
 ---
 
@@ -187,7 +196,7 @@ browser-driven testing (not just static review) was run.
 | Broken links | ✅ None — every relative `.md` link in `README.md`/`docs/*.md` resolves to an existing file. |
 | Google Sheet schema | ✅ Append-only on all three tabs; verified against `EnzoBackend.gs`'s `COL`/`COLO`/`COLP` maps. |
 | Role permissions | ✅ `patients`/`createPatient` added to the backend `CAN` table for Receptionist/Administrator (read: all three roles), mirroring the existing enforcement pattern — UI gating alone was never trusted. |
-| Offline queue | ✅ Verified end-to-end including the new patient-creation path (§8, test 19). |
+| Offline queue | **Corrected in §13:** the original verification of the new patient-creation path was superficial and missed a real orphaning bug (C1). Now genuinely verified end-to-end, including the harder multi-appointment case — see §13. |
 | Search | ✅ One shared implementation (`patients.js`) reused identically across Booking/Online/Dashboard/Timeline — no duplicated/divergent search logic. |
 | Timeline | ✅ Rebuilt on permanent Patient ID; Profile card verified; O(n) search verified. |
 | Patient ID | ✅ Every write path (`book`/`update`/`online`/`complete`/`createPatient`) resolves and persists one; migration self-heals legacy rows. |
@@ -230,7 +239,9 @@ browser-driven testing (not just static review) was run.
   risk as the pre-existing offline queue (carried over from Phase 1/2): if
   the same phone books from two different devices before the first
   device's offline write syncs, two patients can be created for one phone.
-  Verified behavior, documented in `docs/ARCHITECTURE.md` §22.
+  This is a genuine, accepted, documented limitation — it is *not* the
+  same thing as C1 in §13, which was a correctness bug (a broken link),
+  not a data-quality tradeoff like this one.
 - **Migration was verified by full code review + a mock-backend
   integration test** (batched-write logic, lock/flag correctness, phone
   matching) rather than against a multi-thousand-row production Google
@@ -256,18 +267,257 @@ browser-driven testing (not just static review) was run.
   Prescriptions module would key off — see `README.md`/`ARCHITECTURE.md`'s
   updated extension points.
 
-## 12. Production readiness score
+## 12. Production readiness score (superseded — see §13)
 
-**9.0 / 10 — Production ready.**
+The score originally recorded here was **9.0/10**, based on the QA pass in
+§8 as it stood at the time. That QA pass contained a false PASS (test 19)
+that concealed a Critical data-corruption bug, and had not tested the
+`online` action's concurrency behavior at all. That score was wrong. See
+§13 for the corrected score.
 
-All required features are implemented, verified end-to-end in a real
-browser (including two real bugs found and fixed during that testing,
-rather than only through static review), and documented for a
-non-technical operator. The update is fully backward compatible
-(append-only Sheet changes, no `WEB_APP_URL` change, self-healing
-migration, safe partial-rollback path) and reversible. The 1-point
-deduction reflects §10's honestly-documented limitations — phone-only
-matching, no full-scale production-Sheet migration rehearsal, and the
-deliberately-deferred patient-edit UI — none of which are defects in the
-delivered scope, all of which are pre-existing architectural tradeoffs or
-explicitly out-of-scope items.
+## 13. CTO production review, round 2 — adversarial re-audit and fixes
+
+A second review explicitly assumed everything in §1–§12 above was
+unverified until proven otherwise, re-read the code fresh, and tried to
+break it rather than confirm it. It found and fixed the following. Every
+finding below was independently reproduced by reading the actual shipped
+code (not by trusting this report) before any fix was written, and every
+fix was re-verified live (browser + a purpose-built mock backend) after.
+
+### 13.1 Critical
+
+**C1 — Offline-created patients were permanently orphaned from their own appointments.**
+`js/booking.js`'s `saveAppt()` sent whatever `patientId` it had — including
+a client-side placeholder generated by `js/patients.js`'s `createNewPatient()`
+for a patient that only exists locally, not yet on the server — into the
+`book`/`update` payload unconditionally. If that payload itself got queued
+offline, it carried the placeholder into `localStorage` permanently. When
+the queue later flushed, the paired `createPatient` write correctly
+created the real patient with a real, different, server-generated ID —
+but `EnzoBackend.gs`'s `book`/`update` handlers trusted any non-empty
+client-supplied `patientId` unconditionally (`p.patientId || findOrCreatePatient(...)`),
+so the placeholder was written straight into `Appointments` column U. The
+appointment ended up referencing a Patient ID that exists nowhere in
+`Patients` — it would never appear in that patient's Timeline, would never
+be found by Patient ID/OPD search, and the migration would never repair
+it (migration only fills in *blank* Patient IDs; this one was non-blank
+and simply wrong). No error was ever shown to the user.
+**Fix:** `saveAppt()` now tracks whether the resolved patient is `pending`
+(not yet server-confirmed) and omits `patientId` from the outgoing payload
+when it is, letting the server's own phone-based lookup resolve the real
+patient once the paired `createPatient` write has landed ahead of it in
+the queue — the fix `js/online.js` already had; `booking.js` now matches
+it. As defense in depth, `EnzoBackend.gs`'s `findOrCreatePatient()` was
+also changed to take an optional `providedId` and **verify it exists**
+before trusting it, falling back to phone-match-or-create otherwise —
+applied to `book`, `update`, `online`, and `complete`, so a bad ID from
+*any* source (not just this one bug) can never be written into
+`Appointments`/`OnlineRecords` again.
+**Files:** `js/booking.js`, `EnzoBackend.gs`.
+**Verified:** two appointments booked offline for the same brand-new
+patient (the harder case — a second offline booking reusing the first's
+still-pending local patient), then synced against a mock backend
+implementing the real fixed logic. Result: exactly one real patient
+(`ENZO-000001`), both appointments correctly appear in its Timeline,
+visit count 2, zero orphaned references, zero console errors.
+
+**C2 — The `online` write action had no lock, unlike every other action that can create a patient.**
+`book`, `update`, `complete`, and `createPatient` were all wrapped in
+`LockService.getScriptLock()`; `online` was not. Two `online` requests for
+the same brand-new phone number arriving close together (two reception
+devices, a double-submit, a retry) could both miss each other's
+not-yet-committed row and both create a `Patients` row for the same
+phone, and — separately — could both read the `PATIENT_SEQ` counter before
+either wrote it back, handing out the **same OPD Number to two different
+patients**, directly violating the "OPD uniqueness" requirement.
+**Fix:** wrapped the `online` branch in the same lock pattern as its
+siblings.
+**Files:** `EnzoBackend.gs`.
+**Verified:** the exact read-then-write critical section the fix now
+locks was isolated and run both without and with the lock, using
+realistic async I/O yield points to mirror Apps Script's Range API
+round-trips (true parallel execution of Apps Script itself can't be run in
+this environment). Unlocked: 2 patients, 2 different OPD numbers, for one
+phone. Locked (the fix's pattern): 1 patient, 1 OPD number, deterministically.
+
+### 13.2 High
+
+**Migration can hold the shared lock long enough to make every other concurrent write fail.**
+`ensureMigrated()` holds `LockService.getScriptLock()` for the entire,
+unbounded duration of `ensurePatientLinks()`, while `book`/`update`/`complete`/
+`createPatient`/`online` each only waited 10 seconds to acquire that same
+lock before failing with `busy`. On a clinic with a real historical
+dataset, the first person to open the app after this upgrade could cause
+every other concurrent booking/consultation action to fail during the
+migration window.
+**Fix:** raised the dependent actions' lock-acquire timeout from 10s to
+20s, matching `ensureMigrated()`'s own 20s wait. This does not eliminate
+the theoretical risk on an extremely large sheet (a redesign — e.g.
+running migration outside the request-serving lock entirely — was
+considered but rejected as out of scope: it would be a genuine
+architecture change, not a proportionate fix), but it substantially
+narrows the window and is called out explicitly in §10/below as a
+residual risk with a recommended mitigation (run migration once,
+deliberately, before go-live on a large existing dataset, rather than
+relying solely on the lazy first-open trigger).
+**Files:** `EnzoBackend.gs`.
+
+### 13.3 Medium
+
+**M1 — No server-side validation that a client-supplied `patientId` exists.**
+Root cause of C1's persistence; fixed as part of C1's fix (`findOrCreatePatient`'s
+new `providedId` validation). Listed separately because it's an
+independent hardening, not just a C1 patch — it protects against *any*
+future source of a bad ID, not only this one.
+
+**M2 — Timeline/Dashboard patient search never checked Online Record notes.**
+`js/patients.js`'s `patientMatches()` only scanned that patient's
+appointments (diagnosis/clinical/medicine notes/outcome) for a free-text
+match, never their online records' notes/place/referred-by — while the
+Online Records page's own search *did* check those fields. A patient
+findable by their online-record notes on the Online page was not findable
+by the same text on the Timeline or Dashboard.
+**Fix:** added `indexOnlineByPatient()` back (it had been removed as
+"dead code" in the original pass — it should have been wired in here
+instead) and extended `patientMatches()` to also check online records,
+passed in as a second O(n) index alongside the existing appointments
+index so this stays O(patients + records), not O(patients × records).
+**Files:** `js/patients.js`, `js/timeline.js`, `js/dashboard.js`.
+**Verified:** an online record was saved with a unique marker string in
+its notes and no matching appointment; searching the Timeline for that
+exact string found zero patients before the fix and the correct one after.
+
+**M3 — `docs/PATIENT-MASTER.md` misdescribed the migration algorithm.**
+The doc claimed blank-phone rows fall back to name-based matching during
+migration; `EnzoBackend.gs`'s actual `getOrCreate()` has no such fallback
+— every blank-phone row becomes its own new patient, full stop.
+**Fix:** corrected the doc to describe actual (phone-only) behavior and
+added an explicit warning that a clinic with many old blank-phone rows
+should expect the Patients tab/OPD sequence to grow accordingly.
+**Files:** `docs/PATIENT-MASTER.md`.
+
+**M4 — Timeline and Dashboard search were not debounced.**
+Unlike `booking.js`'s duplicate-detection phone check (debounced 250ms),
+`#tSearch` and `#dashSearch` rebuilt the full patient index and rescanned
+every patient on every single keystroke — a real risk of visible input
+lag at the brief's own stated scale (5,000 patients / 10,000 appointments).
+**Fix:** added the same 250ms debounce pattern already used in `booking.js`.
+**Files:** `js/timeline.js`, `js/dashboard.js`.
+
+### 13.4 Low
+
+**L1 — Keyboard activation only handled Enter, not Space.**
+`role="button" tabindex="0"` result rows (Timeline patient list, and the
+new Dashboard quick-search results) only responded to Enter in their
+`keydown` handler; per WAI-ARIA authoring practice a custom button role
+should also respond to Space. Present in Phase-1-era `timeline.js` and
+copied into the new `dashboard.js` without being fixed.
+**Fix:** both handlers now accept Enter or Space (with `preventDefault()`
+on Space so it doesn't also scroll the page).
+**Files:** `js/timeline.js`, `js/dashboard.js`.
+**Verified:** focused a result row, pressed Space, confirmed it opens the
+patient (Timeline) / jumps to the Timeline (Dashboard).
+
+**L2 — Linked patient identity and the appointment's free-text name/phone can silently diverge.**
+**Confirmed, not fixed.** Once a patient is matched, nothing stops
+editing the name/phone fields to something unrelated before submitting —
+the appointment stays linked to the matched `patientId` but its visible
+name/phone can contradict that patient's record. This is allowed "for
+compatibility" by explicit design (per the brief: "Name and phone remain
+for compatibility"). Fixing it would mean adding new UI feedback, which
+falls under "no feature additions" for this review pass. Recorded as a
+future recommendation (§11) instead.
+
+### 13.5 A third bug, found by this round's own regression testing (not one of the original 9)
+
+While re-verifying M2's fix, the online record used to prove it never
+showed up in the Timeline at all — because **`js/online.js` never linked
+an online record to any patient in demo mode, or for a genuinely new phone
+while offline.** Its patient-resolution logic only reacted to a
+server-confirmed `patientId` or an existing *local* phone match; it never
+called `createNewPatient()` the way `booking.js` does, so a brand-new
+phone with no backend reachable (demo mode — permanently, since demo mode
+never syncs) or not yet reachable (offline) saved with `patientId: ''`
+forever unlinked.
+**Fix:** `online.js` now falls back to `createNewPatient()` when there's
+no server-confirmed ID and no local phone match, mirroring `booking.js`.
+The outgoing network payload is unchanged — it still never carries a
+`patientId` — so the server's own phone-based resolution remains the
+source of truth once/if the write actually reaches it; this fix only
+makes the *local, immediate* UI state correct.
+**Files:** `js/online.js`.
+**Verified:** two online records saved back-to-back for the same new
+phone number correctly deduped to exactly one patient in the same
+session; the notes-search regression test (M2) then passed end to end.
+
+### 13.6 QA — re-verification after fixes
+
+| Area | Result |
+|---|---|
+| Offline booking (single new patient) | ✅ PASS |
+| Offline booking (new patient, two appointments before sync) | ✅ PASS — both link to the one real patient, zero orphans |
+| Sync / reconciliation | ✅ PASS — "Pending sync" resolves to the real OPD Number, and the *appointment* now actually points at it |
+| Timeline (name/phone/OPD/Patient ID/diagnosis/online-notes search) | ✅ PASS |
+| Patient ID (never invalid, never orphaned, validated server-side) | ✅ PASS |
+| Duplicate detection (Use existing / Create new anyway / default) | ✅ PASS (re-verified, unaffected by fixes) |
+| OPD uniqueness under concurrency | ✅ PASS (isolated logic proof — see C2) |
+| Concurrent online creation | ✅ PASS (isolated logic proof — see C2; real Apps Script LockService itself could not be executed in this environment) |
+| Migration | ✅ PASS (code-level; lock-contention risk narrowed, not eliminated — see High finding) |
+| Full demo-mode regression (booking, online, dashboard, settings, capacity, theme, keyboard) | ✅ PASS, zero console errors beyond sandbox-blocked external CDN/font requests |
+| Syntax (`node --check` on every changed file) | ✅ PASS |
+
+### 13.7 Files changed in this round
+
+`EnzoBackend.gs`, `js/booking.js`, `js/online.js`, `js/patients.js`,
+`js/timeline.js`, `js/dashboard.js`, `docs/PATIENT-MASTER.md`. No file
+outside this list was touched; no UI redesign, no new features — every
+change is a bug fix to already-shipped Phase 3 code.
+
+### 13.8 Regression risk of these fixes
+
+Low. Every fix either narrows an existing fallback (server now validates
+before trusting, instead of trusting unconditionally — strictly safer for
+every existing caller) or adds a lock around a critical section that was
+already using the same lock elsewhere (no new lock ordering/deadlock risk
+introduced, since `LockService.getScriptLock()` is a single global lock
+already acquired-and-released the same way in four other places). The
+debounce and keyboard fixes are additive UI behavior with no change to
+existing interaction paths. The `online.js` fix only fires in a case
+(`!patientId`) that previously produced a `''` — a change from "wrong" to
+"correct," not a change to any currently-working path.
+
+### 13.9 Production readiness score (corrected)
+
+**8.5 / 10 — Production ready, with the residual risks below understood
+and accepted before go-live.**
+
+The two Critical and one High finding are fixed and re-verified; nothing
+in the original feature set was removed or redesigned to fix them. The
+score is *lower* than the original (wrong) 9.0/10 despite the fixes,
+because this round's own findings — a Critical data-corruption bug that
+passed an initial QA round, an unlocked write path, and a third bug
+surfaced only by chance during unrelated regression testing — demonstrate
+real gaps in verification rigor for a system this report otherwise
+describes as thoroughly tested. The residual risks explicitly not fully
+closed:
+- Migration lock contention is narrowed, not eliminated, on an extremely
+  large sheet (High finding, §13.2) — recommend running migration
+  deliberately before go-live on any clinic with a large historical
+  dataset, rather than relying only on the lazy first-open trigger.
+- `LockService`/Apps Script concurrency behavior itself could not be
+  executed in this environment; C2 and the migration-lock finding were
+  verified by isolating and reproducing the exact logical pattern, and by
+  direct code inspection confirming the real file has that pattern — not
+  by running real concurrent requests against a real Apps Script
+  deployment. A live-deployment concurrency test is recommended before
+  the first production rollout at a busy, multi-device clinic.
+- L2 (name/phone can diverge from the linked patient) remains unfixed by
+  design-scope decision, not oversight.
+
+### 13.10 Verdict
+
+**I APPROVE PHASE 3 FOR PRODUCTION**, conditional on the two residual
+risks above (migration-at-scale rehearsal; a live-deployment concurrency
+smoke test) being carried out before go-live at a clinic with a large
+existing dataset or multiple simultaneous reception devices — both are
+now explicit, tracked action items, not unknowns.

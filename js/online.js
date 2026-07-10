@@ -8,7 +8,7 @@ import { $, fmt, escapeHtml } from './core.js';
 import { store } from './store.js';
 import { postAction } from './api.js';
 import { toast } from './ui.js';
-import { onlineSearchMatches, findPatientByPhone } from './patients.js';
+import { onlineSearchMatches, findPatientByPhone, createNewPatient } from './patients.js';
 
 export function renderOnline(){
   const q = ($('oSearch').value || '').trim();
@@ -56,14 +56,25 @@ export function initOnline(){
     }
     if(d && d.ok === false){ toast('Could not save'); $('oSave').setAttribute('data-state', 'a'); return; }
     // The server always resolves/returns a patientId when reachable. When
-    // the write is queued offline instead, fall back to a local phone
-    // match so the record still groups correctly in the Timeline right
-    // away; a genuinely new patient created while offline links up once
-    // the queued write syncs and the patient list is refreshed.
-    const matched = !d.patientId && rec.phone ? findPatientByPhone(rec.phone) : null;
+    // the write is queued offline (or there is no backend at all — demo
+    // mode) instead, fall back to a local phone match first; if there
+    // isn't one either, create a local patient now (same as booking.js)
+    // so the record links and groups in the Timeline immediately instead
+    // of staying permanently unlinked. This never affects the outgoing
+    // 'online' payload above — it never carries a patientId — so the
+    // server still independently resolves/links the real patient by phone
+    // whenever this write actually reaches it.
+    let patientId = d.patientId || '';
+    if(!patientId && rec.phone){
+      const matched = findPatientByPhone(rec.phone);
+      if(matched) patientId = matched.patientId;
+    }
+    if(!patientId){
+      const patient = await createNewPatient(store.get('token'), { name, phone: rec.phone });
+      if(patient) patientId = patient.patientId;
+    }
     const records = store.get('onlineRecords').slice();
-    records.unshift({ name, place: rec.place, date: rec.date, refby: rec.refby, phone: rec.phone, notes: rec.notes,
-      patientId: d.patientId || (matched ? matched.patientId : '') });
+    records.unshift({ name, place: rec.place, date: rec.date, refby: rec.refby, phone: rec.phone, notes: rec.notes, patientId });
     store.set({ onlineRecords: records });
     renderOnline();
     toast((d.queued ? 'Saved offline — will sync · ' : '') + 'Saved ' + name.split(' ')[0]);

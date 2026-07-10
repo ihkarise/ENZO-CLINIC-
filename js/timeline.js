@@ -13,7 +13,7 @@
 import { $, fmt, escapeHtml } from './core.js';
 import { store } from './store.js';
 import { STAGE } from './workflow.js';
-import { patientById, patientSummary, ageFromDob, indexApptsByPatient, patientMatches } from './patients.js';
+import { patientById, patientSummary, ageFromDob, indexApptsByPatient, indexOnlineByPatient, patientMatches } from './patients.js';
 
 function eventsFor(patientId){
   const events = [];
@@ -41,12 +41,14 @@ function renderPatientList(query){
   const box = $('tResults');
   const q = query.trim();
   if(!q){ box.innerHTML = '<div class="empty">Search a patient by ID, OPD number, name, phone, diagnosis or notes to see their timeline.</div>'; return; }
-  // Build the appointment index once (O(appts)) instead of re-filtering
-  // store.appts once per candidate patient (O(patients × appts)) — keeps
-  // this fast at a few thousand patients/appointments.
+  // Build both indexes once (O(appts + onlineRecords)) instead of
+  // re-filtering store.appts/onlineRecords once per candidate patient
+  // (O(patients × records)) — keeps this fast at a few thousand
+  // patients/appointments/records.
   const apptsByPatient = indexApptsByPatient();
+  const onlineByPatient = indexOnlineByPatient();
   const matches = store.get('patients')
-    .filter(p => patientMatches(p, q, apptsByPatient))
+    .filter(p => patientMatches(p, q, apptsByPatient, onlineByPatient))
     .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
     .slice(0, 20);
   if(!matches.length){ box.innerHTML = '<div class="empty">No matching patients.</div>'; return; }
@@ -99,14 +101,23 @@ export function openPatientTimeline(patientId){
 }
 
 export function initTimeline(){
-  $('tSearch').addEventListener('input', () => renderPatientList($('tSearch').value));
+  // Debounced: rebuilding the appointment/online-record indexes and
+  // re-scanning every patient on every single keystroke is real work at a
+  // few thousand patients — same 250ms debounce booking.js already uses
+  // for duplicate detection.
+  let searchTimer = null;
+  $('tSearch').addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => renderPatientList($('tSearch').value), 250);
+  });
   $('tResults').addEventListener('click', e => {
     const p = e.target.closest('[data-patient]'); if(!p) return;
     renderTimeline(p.getAttribute('data-patient'));
   });
   $('tResults').addEventListener('keydown', e => {
-    if(e.key !== 'Enter') return;
+    if(e.key !== 'Enter' && e.key !== ' ') return;
     const p = e.target.closest('[data-patient]'); if(!p) return;
+    e.preventDefault(); // Space would otherwise scroll the page
     renderTimeline(p.getAttribute('data-patient'));
   });
   renderPatientList('');
