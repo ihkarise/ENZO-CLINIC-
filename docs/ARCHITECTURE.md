@@ -18,7 +18,7 @@ and tracking patients. It has three moving parts:
 |---|---|---|
 | Frontend | Static HTML/CSS/JS (ES Modules), PWA | GitHub Pages (or any static host) |
 | Backend | Google Apps Script (`EnzoBackend.gs`) | Bound to a Google Sheet, deployed as a Web App |
-| Database | Google Sheet, two tabs | `Appointments`, `OnlineRecords` |
+| Database | Google Sheet, three tabs | `Appointments`, `OnlineRecords`, `Patients` |
 | Auth | Script Properties + CacheService tokens | Inside the Apps Script project |
 
 There is **no server you manage, no database you administer, and no build
@@ -27,15 +27,20 @@ repository — what you see in the editor is what ships. This is a deliberate
 design choice: it keeps the system operable by a small clinic team without a
 dedicated ops person.
 
-The project is at **Phase 2 — Clinic Experience Improvements**, built on the
-**Phase 1 — Foundation + Workflow** base (booking, the consultation
-lifecycle, the patient timeline, the dashboard, role-gated access). Phase 2
-adds a dynamic scheduling engine, per-weekday booking capacity, richer
-appointment cards, a light/dark theme, a broader global search, and an
-Administrator-only Settings module (see [§23 Phase 2](#23-phase-2--clinic-experience-improvements)).
+The project is at **Phase 3 — Patient Master + Unique Patient ID + Timeline
+Foundation**, built on **Phase 2 — Clinic Experience Improvements** (dynamic
+scheduling, capacity, appointment cards, theme, search, Settings — see
+[§23](#23-phase-2--clinic-experience-improvements)) and the **Phase 1 —
+Foundation + Workflow** base (booking, the consultation lifecycle, the
+patient timeline, the dashboard, role-gated access). Phase 3 gives every
+patient a permanent identity (Patient ID + sequential OPD Number) instead of
+grouping appointments by guessing name/phone, adds booking-time duplicate
+detection, and rebuilds the Timeline and global search on that permanent
+identity (see [§24 Phase 3](#24-phase-3--patient-master--unique-patient-id--timeline-foundation)).
 Billing, Inventory, Prescriptions, a Patient Portal, Laboratory workflows,
 Payments and WhatsApp automation remain explicitly **out of scope** (see
-[§21 Future roadmap](#21-future-roadmap)).
+[§21 Future roadmap](#21-future-roadmap)) — Phase 3 lays the identity
+foundation those modules will need, without building them.
 
 ---
 
@@ -59,13 +64,15 @@ ENZO-CLINIC-/
 │   ├── booking.js          Booking form + appointment list (Scheduled/Completed tabs)
 │   ├── consultation.js     Complete Consultation modal + automation
 │   ├── online.js           Online patient record page
-│   ├── dashboard.js        KPIs, Chart.js charts, referred-by breakdown + CSV export
-│   ├── timeline.js         Patient timeline (client-side aggregation)
+│   ├── dashboard.js        KPIs, Chart.js charts, referred-by breakdown + CSV export, quick patient search
+│   ├── patients.js         (Phase 3) Patient Master: identity, duplicate lookup, search index, demo derivation
+│   ├── timeline.js         Patient timeline — built on the Patient Master (patientId), not name/phone guessing
 │   ├── reminders.js        Bell icon / "today" modal
 │   └── app.js              Bootstrap — the only script index.html loads directly
 ├── assets/                Logos, favicon, PWA icons (PNG)
 └── docs/
     ├── ARCHITECTURE.md          (this file)
+    ├── PATIENT-MASTER.md        (Phase 3) Patient identity, duplicate detection, migration — plain English
     ├── DEPLOYMENT-GUIDE.md      Beginner-friendly full deployment walkthrough
     ├── OPERATIONS-RUNBOOK.md    Day-to-day staff operating procedures
     ├── DEPLOYMENT.md            Original short deploy guide (kept for reference)
@@ -95,6 +102,10 @@ into another module's private variables.
   for optimistic UI before the server confirms.
 - `toISODate(d)` — `YYYY-MM-DD`.
 - `digits(s)` — strips a phone number down to what `tel:`/`wa.me` accept.
+- `normPhone(s)` — (Phase 3) digits-only, last 10 kept, for patient-identity
+  matching. Mirrors `EnzoBackend.gs`'s `normPhone()` exactly — client and
+  server must agree on what "same phone" means, or a duplicate-detection
+  match on the client could disagree with what the server actually links.
 - `escapeHtml(s)` — **the only thing standing between patient-entered text
   and stored XSS.** Every place a module builds `innerHTML` from
   user-entered data (name, phone, notes, diagnosis, referrer, place) must
@@ -110,11 +121,16 @@ store.set(patch)       // Object.assign the patch into state, then fire listener
 store.on(event, fn)     // subscribe to one key changing, or '*' for any change
 ```
 
-State held here: `token`, `user`, `role`, `appts`, `onlineRecords`, `online`
+State held here: `token`, `user`, `role`, `appts`, `onlineRecords`,
+`patients` (Phase 3 — the Patient Master, see `js/patients.js`), `online`
 (navigator connectivity), `loading`, booking-form transient fields
 (`editingId`, `apptTouched`, `selectedSlot`, `bookingType`), list UI state
 (`listTab`, `scheduledSub`, `completedSub`), dashboard `range`, and
 undo/focus bookkeeping (`pendingDeleteId`, `lastFocus`, `lastDeleted`).
+(Booking's duplicate-detection state — `dupMatch`/`dupDecision`/
+`editPatientId` — is deliberately kept as module-local variables in
+`booking.js`, not in `store.js`: nothing outside that one module needs it,
+same pattern as `consultation.js`'s local `medDuration`/`outcome`.)
 
 `store.js` also exports `can(action)` — **the client-side half of the
 permission system.** It is a pure function of `state.role` and a
@@ -135,7 +151,11 @@ hard-coded permission table (see [§8 Role system](#8-role-system)).
   reordered.
 - `login(user, pass)` — demo-mode short-circuit, or a real POST to the
   backend's `login` action.
-- `fetchAppts(token)` / `fetchOnline(token)` — the two GET reads.
+- `fetchAppts(token)` / `fetchOnline(token)` / `fetchPatients(token)` — the
+  three GET reads (`fetchPatients` is Phase 3, the Patient Master).
+- `createPatient(token, fields)` — (Phase 3) POST `createPatient`, routed
+  through `postAction` so it inherits the same offline queue as every
+  other write.
 - `genDemoAppts()` / `genDemoOnline()` — synthetic data generators used
   **only** when `WEB_APP_URL` is blank. A hard production bug from the
   previous build (silently showing fake patients whenever a configured
@@ -188,7 +208,18 @@ follow-up" *mean*, so every UI module stays a dumb renderer.
 - Renders only free slots for the selected date (`renderSlots`).
 - The Scheduled/Completed tab switch and their sub-filters
   (Upcoming/Today/Pending, Completed/Cancelled/No-show) with live counts.
-- Search filters across **all** appointments regardless of the active tab.
+- Search filters across **all** appointments regardless of the active tab,
+  now via `patients.js`'s `apptSearchMatches()` — extends the base
+  name/phone/ID/diagnosis/notes match with the linked patient's OPD
+  Number/Patient ID/Notes.
+- **(Phase 3) Duplicate-patient detection**: a debounced listener on the
+  phone field calls `patients.js`'s `findPatientByPhone()`; a match renders
+  the Returning Patient card (`#dupCard`) with **Use existing** / **Create
+  new anyway**, collapsing to a small chip (`#dupChip`) once decided. On
+  save, `saveAppt()` resolves a `patientId` before booking — the matched
+  patient, a freshly `createNewPatient()`-created one, or (editing) the
+  appointment's existing, unchanged `patientId`. Suppressed entirely while
+  editing an existing appointment (identity never changes on edit).
 - Delete is soft in the UI: `performDelete` removes the row from the local
   list immediately, shows a 5-second **Undo** toast, and only fires the
   server-side `delete` action if the toast times out unactioned.
@@ -215,7 +246,12 @@ The heart of Phase 1. Opens a modal (`openConsult`) either in edit mode
 ### `js/online.js` — Online patient record page
 Simple create-and-list page for records not tied to an appointment (e.g. a
 lead that hasn't booked yet). HTML-escaped on render (this page had a
-stored-XSS hole in the pre-Phase-1 build; fixed here).
+stored-XSS hole in the pre-Phase-1 build; fixed here). (Phase 3) A search
+box filters via `patients.js`'s `onlineSearchMatches()`; on save, the
+record's `patientId` comes from the server's response (it always resolves
+one — matched by phone or freshly created) or, if the write was queued
+offline, a local phone match against the already-loaded Patient Master so
+the record still groups correctly in the Timeline immediately.
 
 ### `js/dashboard.js` — KPIs and charts (Administrator only)
 - Week/Month/Year range toggle recomputes `bounds()` (current + comparison
@@ -233,17 +269,66 @@ stored-XSS hole in the pre-Phase-1 build; fixed here).
   `typeof Chart === 'undefined'` and degrades gracefully — chart boxes show
   "Charts unavailable offline" instead of throwing and breaking the rest of
   the app bootstrap.
+- **(Phase 3)** A quick patient search box (`#dashSearch`) reuses the same
+  `patients.js` search index; picking a result switches to the Timeline
+  page and opens that patient directly (`setTimelineOpener`), rather than
+  duplicating the Timeline's own rendering here.
+
+### `js/patients.js` — Patient Master (Phase 3)
+The single place that decides "which patient does this record belong to"
+on the frontend. Appointments/online records carry a `patientId`; this
+module never groups by guessing name/phone.
+- `patientById(id)` / `findPatientByPhone(phone)` — exact-`patientId` and
+  exact-normalised-phone lookups against `store.patients`.
+- `indexApptsByPatient()` — builds a `patientId → appointments[]` `Map` in
+  one pass. Every place that scans **many** patients (Timeline search,
+  Dashboard quick search) builds this once and reads from it, instead of
+  re-filtering `store.appts` per candidate patient — that's what keeps
+  search **O(patients + appointments)** instead of **O(patients ×
+  appointments)** at a few thousand rows of each.
+- `recordsFor(patientId)` / `patientSummary(patientId)` — one patient's
+  appointments+online records, and a `{visitCount, lastVisit, diagnosis}`
+  summary — cheap for a single patient (Timeline detail view, the
+  duplicate-detection prompt); not meant to be called in a loop over many
+  patients (use the index above for that).
+- `ageFromDob(dob)` — whole years from a DOB to today, or `''` if none on
+  file (most patients don't have one yet — the booking form never asked).
+- `createNewPatient(token, fields)` — unconditional create (no dedup — see
+  `EnzoBackend.gs`'s `createPatient` vs `findOrCreatePatient`). Offline- and
+  demo-mode-safe: if the write is queued or there is no backend at all, an
+  optimistic local patient is pushed into `store.patients` immediately so
+  booking isn't blocked; a queued write's real OPD Number lands once it
+  syncs and `app.js`'s `maybeFlushQueue()` re-fetches.
+- `patientMatches(patient, query, apptsByPatient)` / `apptSearchMatches(appt, query)`
+  / `onlineSearchMatches(record, query)` — the one global search rule
+  (Patient ID / OPD Number / Name / Phone / Notes, plus Diagnosis /
+  Clinical / Medicine notes / Outcome via that patient's appointments),
+  applied identically from Booking, Online Records, the Dashboard and the
+  Timeline. `apptSearchMatches`/`onlineSearchMatches` compose with
+  `core.js`'s `apptMatches()` rather than re-implementing its field list.
+- `deriveDemoPatients(appts, onlineRecords)` — demo-mode only: derives a
+  consistent Patient Master from the generated demo data (same phone/name
+  key rule) and stamps `patientId` onto every generated record, so demo
+  mode never has to be special-cased anywhere else in the app.
 
 ### `js/timeline.js` — Patient Timeline
-Built **entirely client-side** from data already loaded by `booking.js`
-(`appts`) and `online.js` (`onlineRecords`) — no dedicated backend endpoint.
-- `patientKey(p)` — a patient identity key: phone number if present,
-  otherwise the lowercased trimmed name. This is how records from two
-  different sheets (Appointments, OnlineRecords) get merged into one
-  person's history.
-- `eventsFor(key)` builds a chronological list of every booked/cancelled/
-  no-show/completed appointment plus every online record for that patient,
-  sorted newest-first.
+Built **entirely client-side** from data already loaded by `app.js`'s
+`loadData()` (`appts`, `onlineRecords`, and — Phase 3 — `patients`) — no
+dedicated backend endpoint for rendering.
+- Search (`renderPatientList`) filters `store.patients` via
+  `patients.js`'s `patientMatches()`, built against a single
+  `indexApptsByPatient()` pass (see above) so it stays fast well past a
+  few thousand patients.
+- Selecting a patient (`renderTimeline(patientId)`) shows a **Patient
+  Profile card** (`profileCardHtml` — OPD, Name, Phone, Age, Gender, Visit
+  Count, Last Visit) followed by the event list.
+- `eventsFor(patientId)` builds a chronological list of every booked/
+  cancelled/no-show/completed appointment plus every online record whose
+  `patientId` matches, sorted newest-first — grouping is the permanent
+  Patient ID, never a guessed name/phone key.
+- `openPatientTimeline(patientId)` — the entry point used by Booking's
+  "View timeline" link and the Dashboard's quick search to jump straight
+  to one patient (the caller switches pages first; `app.js` wires this).
 
 ### `js/reminders.js` — the bell icon and "today" modal
 Counts only `Scheduled`-stage appointments due today or requiring a
@@ -258,9 +343,11 @@ Responsibilities, in order:
 1. Wires every module's `init*()` function.
 2. Registers the service worker (`sw.js`) after `load`.
 3. On successful login (`enterApp`): hides the login screen, applies role
-   gating, loads data (`loadData` — real fetch or demo generator depending
-   on `CONFIG.WEB_APP_URL`), renders every page, tries to flush the offline
-   queue if online, and opens the "today" modal if there's anything due.
+   gating, loads data (`loadData` — real fetch (appointments, online
+   records, **and, Phase 3, patients**) or demo generator + `deriveDemoPatients()`
+   depending on `CONFIG.WEB_APP_URL`), renders every page, tries to flush
+   the offline queue if online, and opens the "today" modal if there's
+   anything due.
 4. Owns page navigation (`navTo`) — a simple `.page.active` class toggle
    with a directional slide animation, no router/history API involved
    (this is a single-page app with in-memory navigation only; there is no
@@ -268,6 +355,14 @@ Responsibilities, in order:
 5. `initOfflineIndicator()` — listens to `window`'s `online`/`offline`
    events, toggles the top offline bar, and triggers a queue flush the
    moment connectivity returns.
+6. **(Phase 3)** Wires `booking.js`'s and `dashboard.js`'s
+   `setTimelineOpener()` to a shared `openTimelineFor(patientId)` — switch
+   to the Timeline page, then `timeline.js`'s `openPatientTimeline(patientId)`
+   — the same "register a callback" pattern already used for
+   `setConsultOpener`/`setNavigator`. `maybeFlushQueue()` also re-runs
+   `loadData()` after a successful flush, so a patient created while
+   offline picks up its real server-assigned OPD Number without a manual
+   reload.
 
 ---
 
@@ -350,10 +445,10 @@ happens if you enable them with placeholder values.
 
 ## 6. Google Sheets architecture
 
-Two tabs, created automatically (`sheetOf()` inserts a sheet by name if it
-doesn't exist yet — you never have to manually create the tabs, only get
-their **column headers** right the first time you type into them manually,
-see the Deployment Guide).
+Three tabs, created automatically (`sheetOf()` inserts a sheet by name if
+it doesn't exist yet — you never have to manually create the tabs, only
+get their **column headers** right the first time you type into them
+manually, see the Deployment Guide). `Patients` is new in Phase 3.
 
 ### `Appointments` — one row per appointment
 | Col | Field | Notes |
@@ -378,11 +473,13 @@ see the Deployment Guide).
 | R | Follow-up Date | computed by the doctor's chip selection, editable |
 | S | Outcome | mirrors Stage for Completed rows |
 | T | Parent Appt ID | set only on an auto-generated follow-up row |
+| U | Patient ID | **(Phase 3)** permanent link into `Patients`; resolved/written on every `book`/`complete`, and on `update` only if the client explicitly sends one |
 
 Columns **A–L are the original, pre-Phase-1 schema** — untouched by the
-Phase 1 upgrade. Columns **M–T were appended**, never inserted in the
-middle, so no existing formula or row shifts. See `MIGRATION.md` for the
-exact backward-compatibility guarantees.
+Phase 1 upgrade. Columns **M–T were appended** by Phase 1, column **U by
+Phase 3** — never inserted in the middle, so no existing formula or row
+shifts. See `MIGRATION.md` (Phase 1) and `PATIENT-MASTER.md` (Phase 3) for
+the exact backward-compatibility guarantees.
 
 ### `OnlineRecords` — one row per online-lead/consultation record
 | Col | Field | Notes |
@@ -394,6 +491,27 @@ exact backward-compatibility guarantees.
 | E | Referred By | free text; dashboard groups by this |
 | F | Notes | |
 | G | Source Appt ID | **blank** for manually entered records; set only when auto-created by `complete`, used to make that auto-creation idempotent |
+| H | Patient ID | **(Phase 3)** permanent link into `Patients`; resolved/written on every `online` write |
+
+### `Patients` — one row per patient, forever (Phase 3)
+| Col | Field | Notes |
+|---|---|---|
+| A | Patient ID | permanent internal key, e.g. `pt3f9c2d81b2` — every other tab links to this, never shown to staff |
+| B | OPD Number | e.g. `ENZO-000123` — sequential (`PATIENT_SEQ` Script Property), never reused, never edited; what staff actually see/search |
+| C | Name | |
+| D | Phone | |
+| E | Gender | optional — no booking-form field writes this yet |
+| F | DOB | optional — same as above |
+| G | Address | optional |
+| H | Email | optional |
+| I | Created Date | |
+| J | Updated Date | |
+| K | Status | `Active` by default |
+| L | Notes | optional |
+
+New tab, new sheet, no pre-existing column layout to preserve — but the
+**same append-only discipline** applies going forward: any future column
+here is added after L, never inserted in the middle.
 
 ---
 
@@ -598,15 +716,19 @@ Deployment Guide for people setting up a Sheet from scratch.
 | POST | `book` | token | `book` | Appends an Appointments row, `Stage=Scheduled` |
 | POST | `update` | token | `update` | Rewrites name/phone/visit/days/type/date/slot on an existing row |
 | POST | `delete` | token | `delete` | Deletes the Appointments row by ID |
-| POST | `online` | token | `online` | Appends an OnlineRecords row |
-| POST | `complete` | token | `complete` | Writes Stage/Diagnosis/.../Outcome; may auto-create a follow-up appointment and/or online record |
-| GET | `all` (default) | token | `all` | Returns every Appointments row, shaped for the frontend |
+| POST | `online` | token | `online` | Appends an OnlineRecords row; resolves/creates its Patient ID |
+| POST | `createPatient` | token | `createPatient` | **(Phase 3)** Unconditionally appends a Patients row with the next OPD Number — no dedup check, that's the caller's decision (e.g. "Create new anyway") |
+| POST | `complete` | token | `complete` | Writes Stage/Diagnosis/.../Outcome; may auto-create a follow-up appointment and/or online record; carries the source row's Patient ID onto both |
+| GET | `all` (default) | token | `all` | Returns every Appointments row, shaped for the frontend; runs the one-time Patient ID migration first (see §24) |
 | GET | `online` | token | `online` | Returns every OnlineRecords row |
+| GET | `patients` | token | `patients` | **(Phase 3)** Returns every Patients row |
 
 All responses are JSON via `ContentService`. Errors are always
 `{ ok:false, error:'<reason>' }` with `error` one of: `bad request`,
 `unauthorized`, `forbidden`, `busy` (lock timeout), `slot_taken`,
-`not_found`, `unknown action`.
+`not_found`, `unknown action`. A successful `book`/`online`/`complete`
+also returns `patientId` — the identity the server actually resolved or
+created, so the client never has to guess it.
 
 ## 18. Extension points
 
@@ -621,9 +743,11 @@ require another foundation rewrite:
   prescription module can read/write alongside them without schema changes.
 - **Inventory** — independent sheet + module; consultation medicine notes
   can later reference inventory items by name/ID.
-- **Patient Portal** — `timeline.js`'s aggregation is already
-  patient-centric (keyed by phone); it can be exposed as a read-only view
-  behind separate patient authentication.
+- **Patient Portal** — ✅ Phase 3's Patient Master makes this
+  straightforward now: every patient has a permanent Patient ID/OPD
+  Number, so a read-only view behind separate patient authentication is a
+  filtered read against `Patients`/`Appointments`/`OnlineRecords`, not an
+  identity redesign.
 - **Laboratory** — a new `stage` value, or a parallel `LabOrders` sheet,
   using the same append-only-column pattern as the Phase 1 migration.
 - **WhatsApp Automation** — `checkFollowUps()` in `EnzoBackend.gs` already
@@ -652,11 +776,16 @@ require another foundation rewrite:
    matching check to `EnzoBackend.gs`'s `CAN` table. A UI-only restriction
    is not a restriction.
 6. **Sheet columns are append-only.** Never insert a new column in the
-   middle of `Appointments` or `OnlineRecords` — it will silently corrupt
-   every existing formula and every row that predates the change. Add new
-   fields as new columns at the end, update `COL`/`COLO` in
-   `EnzoBackend.gs`, and treat a blank value in an old row as "not yet set"
-   (the same pattern `Stage` uses).
+   middle of `Appointments`, `OnlineRecords` or `Patients` — it will
+   silently corrupt every existing formula and every row that predates the
+   change. Add new fields as new columns at the end, update
+   `COL`/`COLO`/`COLP` in `EnzoBackend.gs`, and treat a blank value in an
+   old row as "not yet set" (the same pattern `Stage`, and now Patient ID,
+   use).
+6a. **Patient identity is the Patient ID, never name/phone text matching.**
+   Every new module that touches patients (billing, prescriptions, a
+   portal) must key off `patientId`, not re-derive identity by comparing
+   name/phone strings — that is exactly the bug Phase 3 fixed.
 7. **Bump the service worker cache name** (`sw.js`'s `CACHE` constant)
    whenever you add, remove, or rename a file in `SHELL`, or returning
    users will keep getting a stale shell.
@@ -694,6 +823,21 @@ README) is:
 
 ## 22. Known risks (carried over from README — read before extending)
 
+- **Patient matching is phone-only (Phase 3).** Two patients can only be
+  disambiguated automatically by phone number. A patient with no phone on
+  file can never be auto-matched to a later visit; two different people
+  who genuinely share one phone number will be treated as the same patient
+  unless reception explicitly picks "Create new anyway". See
+  `PATIENT-MASTER.md`.
+- **Offline-created patients drift until the next sync (Phase 3).** A
+  patient created while offline gets a temporary local ID and an
+  "Pending sync" OPD Number immediately (so booking isn't blocked); the
+  real, server-assigned OPD Number only appears after `maybeFlushQueue()`
+  successfully re-fetches. If the same phone books again from a *different*
+  device before that sync happens, the two devices can each create their
+  own new patient for that phone — the offline queue is per-device, not a
+  cross-device lock (this is the same class of risk as the pre-existing
+  offline-queue limitation below, just applied to patient identity too).
 - **Role model is coarse.** All signed-in roles can currently read the
   Patient Timeline, including diagnosis text — there is no per-field
   medical-record ACL. Acceptable for a small clinic with a shared-login
@@ -777,3 +921,124 @@ inline `<head>` script applies the saved theme before first paint to avoid a
 flash; `theme.js` then keeps "system" mode live via a `matchMedia` listener.
 All colour work is a single `[data-theme="dark"]` override block in
 `app.css` — no markup or component changes.
+
+---
+
+## 24. Phase 3 — Patient Master + Unique Patient ID + Timeline Foundation
+
+Phase 3 replaces name/phone-guessing patient grouping with one permanent
+identity per patient. One new sheet tab (`Patients`), one new column each
+on `Appointments` (U) and `OnlineRecords` (H), no other schema change, no
+`WEB_APP_URL` change.
+
+### 24.1 New module
+
+`js/patients.js` — see [§3](#3-module-responsibilities) above for the full
+export list. It is the single place that answers "which patient does this
+record belong to" on the frontend; every other Phase 3 change (booking's
+duplicate card, the Online Records/Timeline/Dashboard search boxes) is a
+thin consumer of it.
+
+### 24.2 Identity model
+
+- **Patient ID** (`pt...`) — permanent, internal, generated once
+  (`Utilities.getUuid().slice(0,10)` prefixed `pt`), never shown to staff.
+- **OPD Number** (`ENZO-000123`) — sequential, generated from a single
+  Script Property counter (`PATIENT_SEQ`), incremented under the script
+  lock so two simultaneous bookings can never be allocated the same
+  number. Never reused (even if a patient row is later deleted by hand —
+  don't do that; deactivate via `Status` instead), never edited by the app.
+- Matching is **exact-phone only** (`normPhone()` — digits only, last 10
+  kept, mirrored identically in `EnzoBackend.gs` and `js/core.js`). Name is
+  never used to merge two different phone numbers into one patient — that
+  would risk silently merging two different people.
+
+### 24.3 Where identity gets resolved
+
+| Situation | What resolves the Patient ID |
+|---|---|
+| Booking, phone matches a known patient, no explicit choice | Client defaults to that match (`saveAppt` in `booking.js`) — the safe default is always "reuse", never "create a duplicate" |
+| Booking, reception picks "Use existing" | Same — explicit confirmation of the client-detected match |
+| Booking, reception picks "Create new anyway" | Client calls `createPatient` (unconditional, no dedup) before booking |
+| Booking, no match found at all | Client calls `createPatient` before booking — the OPD Number exists before the appointment does, per the required flow |
+| Editing an existing appointment | Never re-resolved — carries the appointment's existing `patientId` through unchanged |
+| Online record save | Server resolves it (`p.patientId \|\| findOrCreatePatient(...)`) — no UI prompt on this page, matching its always-been-lightweight design |
+| `complete` (auto follow-up / auto online record) | The source appointment's own `patientId` (resolving it first if a legacy pre-migration row somehow still lacks one) |
+| Any write missing a `patientId` (older client, direct API call) | Backend's `book`/`online`/`complete` all fall back to `findOrCreatePatient(name, phone)` — nothing is ever left unlinked |
+
+### 24.4 Migration — safe, automatic, runs once
+
+`EnzoBackend.gs`'s `ensureMigrated()` is called at the top of every `doGet`
+for `all`/`online`/`patients`. It checks one Script Property flag
+(`PATIENTS_MIGRATED_V1`); if unset, it takes the script lock, re-checks the
+flag (avoids a double-run race between two simultaneous requests), and
+calls `ensurePatientLinks()`:
+
+1. Reads the whole `Patients` sheet once into a `phone → patientId` map.
+2. Scans `Appointments` once; any row with a blank Patient ID is matched
+   against that map (or a new patient is queued if no match), collecting
+   the *entire* column's new values into one in-memory array.
+3. Same for `OnlineRecords`.
+4. Writes each column back in **at most three `setValues()` calls total**
+   (one per sheet, plus one append for all newly-created patients) — not
+   one write per row. This is what keeps the one-time migration fast even
+   at thousands of existing rows, and it's also why the routine is safe to
+   call from a read path: worst case, it does real work exactly once, ever.
+5. Sets the flag. Every request after that is just map lookups — no writes.
+
+No existing cell is ever rewritten by this process; it only fills in the
+previously-blank Patient ID column.
+
+### 24.5 Duplicate detection UI (`booking.js`)
+
+A debounced (250ms) listener on `#phone` calls `findPatientByPhone()`. A
+match renders `#dupCard` (OPD, name, last visit + last diagnosis via
+`patientSummary()`, a "View timeline →" link, and the two decision
+buttons); the name field is auto-filled from the match if it's still
+empty. Either button collapses the card to a small `#dupChip` reflecting
+the decision, clickable to reopen. The whole thing is suppressed while
+`store.editingId` is set — editing never re-runs detection. (A CSS note
+for anyone touching this: `#dupChip`'s base class sets `display:
+inline-flex`, so it needs its own `.dupchip[hidden]{display:none}` rule —
+an author-stylesheet `display` declaration otherwise beats the browser's
+default `[hidden]{display:none}` at equal specificity. `.editbanner` has
+the same guard for the same reason; follow that pattern for any new
+element that both sets its own `display` and gets toggled via `hidden`.)
+
+### 24.6 Search, unified
+
+`patients.js`'s `patientMatches()` / `apptSearchMatches()` /
+`onlineSearchMatches()` are the *only* place search rules live. Booking,
+Online Records, the Dashboard's quick-search, and the Timeline all call
+into the same functions rather than each re-implementing "does this query
+match this record" — the explicit goal (per the Phase 3 brief) of "one
+global search, works everywhere, no fake search."
+
+### 24.7 Performance
+
+- **No O(n²) loops.** Any operation that scans *many* patients (Timeline
+  search, Dashboard quick search) builds one `indexApptsByPatient()` `Map`
+  first (O(appointments)), then does O(1) lookups per patient — never
+  re-filters the full appointments array once per candidate patient.
+- The migration's three-batched-write design (§24.4) keeps the one-time
+  backfill fast regardless of row count, and every request after it is
+  pure in-memory map lookups.
+- Search itself is a client-side array filter over data already in memory
+  (loaded once at login) — no network round trip per keystroke, which is
+  what keeps typing in any of the search boxes feeling instant.
+
+### 24.8 What Phase 3 deliberately did not add
+
+- No **Doctor** field anywhere in the schema — the app has no
+  multi-doctor/per-appointment-doctor concept today, so the "Doctor" line
+  mentioned in some duplicate-detection mockups is omitted rather than
+  half-built.
+- No dedicated "Edit patient" screen/endpoint — Gender/DOB/Address/Email
+  exist as `Patients` columns for a future module to use, but nothing in
+  today's UI collects or edits them (the booking form still only asks for
+  Name/Phone, unchanged). Editing those fields today means editing the
+  `Patients` sheet directly.
+- No cross-device offline reconciliation for patient identity beyond what
+  §24.2's known risk already describes — that would be a genuinely new
+  piece of sync infrastructure, out of scope for "lay the identity
+  foundation."

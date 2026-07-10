@@ -67,6 +67,28 @@ cannot open Complete Consultation, and cannot see the Dashboard.
 > other, the second one will see "That slot was just taken" — this is the
 > system protecting against double-booking; pick a different slot.
 
+### 2.1a Returning patients — the "Patient Master" (Phase 3)
+Every patient now has one permanent record with an **OPD Number**
+(`ENZO-000123`) that never changes and is never reused — write it on a
+prescription, say it to a patient, search for it anywhere in the app.
+
+- The moment you finish typing a phone number that's been seen before, a
+  **"Returning patient"** card appears above the form showing their OPD
+  Number, name, last visit and last diagnosis.
+- **Tap "Use existing"** (or just keep booking — this is the default if you
+  don't tap anything) to link the new appointment to that same patient.
+  This is what you want almost every time.
+- **Tap "Create new anyway"** only when you're sure this is a *different*
+  person who happens to share a phone number with someone already in the
+  system (e.g. a shared family or clinic landline). This creates a
+  brand-new OPD Number.
+- If the phone number has never been seen before, nothing extra happens —
+  a new patient record is created quietly the moment you save.
+- Tap **View timeline →** on the card to jump straight to that patient's
+  full history before deciding.
+
+See [`PATIENT-MASTER.md`](PATIENT-MASTER.md) for the full explanation.
+
 ### 2.2 Editing an appointment
 1. Find the appointment in the list (Scheduled tab), tap the **pencil** icon.
 2. The form pre-fills; an **"Editing <name>"** banner appears at the top.
@@ -81,8 +103,10 @@ cannot open Complete Consultation, and cannot see the Dashboard.
    - If you don't tap Undo, the deletion becomes permanent after the toast expires.
 
 ### 2.4 Search
-Type a name or phone number into the search bar — it searches **every**
-appointment regardless of which tab/filter is currently active.
+Type a name, phone number, **OPD Number**, diagnosis or note into the
+search bar — it searches **every** appointment regardless of which
+tab/filter is currently active. The same search works identically on the
+Online Records page, the Dashboard's quick patient box, and the Timeline.
 
 ### 2.5 Print today's schedule
 Tap **Print today** (top of the appointment list) — opens the browser's
@@ -140,10 +164,14 @@ its full consultation record read-only (Save is hidden, button says
 "Close" instead of "Cancel").
 
 ### 3.3 Patient Timeline
-Go to the **Timeline** tab, search by name or phone, tap a matching
-patient to see every appointment, consultation, diagnosis, medicine, and
-online record for them in one chronological list — useful for reviewing
-history before a consult.
+Go to the **Timeline** tab, search by **OPD Number, Patient ID, name,
+phone, diagnosis or notes**, tap a matching patient. You'll see a **Patient
+Profile card** first — OPD Number, Name, Phone, Age, Gender, Visit Count,
+Last Visit — followed by every appointment, consultation, diagnosis,
+medicine and follow-up entry, newest first. Because every record is now
+linked by a permanent Patient ID (not a guessed name/phone match), a
+patient's full history shows up correctly even if their phone number or
+the spelling of their name changed between visits.
 
 ---
 
@@ -163,6 +191,23 @@ Go to the **Dashboard** tab (only visible to Administrator).
 - **Referred-by breakdown:** tap any source in the list to filter the
   detail view to just that source's records; tap **CSV** to export the
   current breakdown as a spreadsheet file.
+
+### 4.1a Patient Master (Phase 3)
+Every patient's Gender, DOB, Address and Email fields exist in the
+`Patients` tab of the Google Sheet for future use, but there is no in-app
+screen to edit them yet — the booking form still only collects Name and
+Phone. To fill in or correct those fields today, open the Google Sheet
+directly, find the patient's row in `Patients` by their OPD Number, and
+edit it there. **Never edit the Patient ID or OPD Number columns** — they
+are permanent identifiers other tabs link to.
+
+If you ever discover that one real patient ended up with two different OPD
+Numbers (e.g. from "Create new anyway" being used by mistake, or because
+their two old records used two different phone numbers before this
+update), you can merge them by hand: pick the OPD Number to keep, then
+change the **Patient ID** cell on the other person's rows in `Appointments`
+and `OnlineRecords` to match the Patient ID of the one you're keeping (not
+the OPD Number — the internal Patient ID in column A of `Patients`).
 
 ### 4.2 Staff account management
 Administrator manages staff logins directly in the Apps Script editor
@@ -254,7 +299,9 @@ Do this monthly at minimum; weekly for a busy clinic. See
 3. Optionally also **File → Download → Microsoft Excel (.xlsx)** for an
    offline copy outside Google Drive entirely.
 4. Confirm the backup file actually contains rows (open it, don't just
-   trust the copy succeeded) before considering the backup complete.
+   trust the copy succeeded) before considering the backup complete — check
+   all three tabs (`Appointments`, `OnlineRecords`, and `Patients`, which
+   holds every patient's permanent OPD Number).
 5. Delete backups older than your retention policy (e.g. keep the last 6
    monthly backups) to avoid Drive storage clutter — but always keep at
    least the most recent 2–3.

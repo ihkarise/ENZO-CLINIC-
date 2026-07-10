@@ -36,6 +36,15 @@ export function digits(s){
   return String(s || '').replace(/[^\d+]/g, '');
 }
 
+/** Normalise a phone number for patient-identity matching: digits only,
+ *  last 10 kept (so a +91/0 country/trunk prefix never creates a false
+ *  "different patient"). Mirrors EnzoBackend.gs's normPhone() exactly —
+ *  both sides must agree on what "same phone" means. */
+export function normPhone(s){
+  const d = String(s || '').replace(/\D/g, '');
+  return d.length > 10 ? d.slice(-10) : d;
+}
+
 /** Global search matcher (Phase 2). Matches a query against an appointment
  *  across name, phone, appointment ID, diagnosis, clinical/medicine notes
  *  and outcome — so the same search works in Scheduled, Completed and the

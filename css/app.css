@@ -226,6 +226,33 @@ input[type=time]:focus{border-color:var(--teal);background:#fff;}
 .switchrow{display:flex;align-items:center;gap:10px;font-size:.9rem;cursor:pointer;}
 .switchrow input{width:20px;height:20px;min-height:auto;flex:none;accent-color:var(--blue);}
 
+/* ===== Phase 3 — Patient Master: duplicate detection, profile card ===== */
+.dupcard{background:var(--teal-soft);border:1px solid #c9ebe9;border-radius:var(--r-sm);padding:14px;margin-bottom:16px;animation:rise .3s var(--t8-ease) both;}
+.dup-h{font-size:.66rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--teal);margin-bottom:8px;}
+.dup-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;}
+.dup-opd{font-family:"Poppins";font-weight:700;font-size:.76rem;color:var(--blue);background:#fff;border-radius:999px;padding:3px 10px;}
+.dup-name{font-weight:600;font-size:.92rem;}
+.dup-meta{font-size:.8rem;color:var(--light);margin-bottom:6px;}
+.dup-timeline-link{display:inline-block;background:none;border:none;color:var(--teal);font:inherit;font-size:.78rem;font-weight:600;cursor:pointer;padding:0;margin-bottom:12px;}
+.dup-actions{display:flex;gap:10px;}
+.dup-actions .btn-ghost,.dup-actions .btn-primary{flex:1;width:auto;margin-top:0;min-height:42px;padding:10px;font-size:.85rem;box-shadow:none;}
+.dupchip{display:inline-flex;align-items:center;gap:7px;background:#fff;border:1.5px solid var(--teal);color:var(--teal);font:inherit;font-size:.8rem;font-weight:600;border-radius:999px;padding:8px 14px;cursor:pointer;margin-bottom:16px;transition:background .2s;}
+.dupchip[hidden]{display:none;}
+.dupchip:hover{background:var(--teal-soft);}
+.dupchip.new{border-color:var(--coral);color:var(--coral);}
+.dupchip.new:hover{background:var(--coral-soft);}
+.pcard{background:#fff;border-radius:var(--r);padding:18px;margin-bottom:16px;box-shadow:var(--shadow);animation:rise .4s var(--t8-ease) both;}
+.pcard-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;}
+.pcard-opd{font-family:"Poppins";font-weight:700;font-size:.78rem;color:var(--blue);background:var(--teal-soft);border-radius:999px;padding:4px 11px;}
+.pcard-name{font-family:"Poppins";font-weight:700;font-size:1.1rem;}
+.pcard-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;margin-bottom:4px;}
+.pcard-grid .pi-lbl{font-size:.66rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--light);}
+.pcard-grid .pi-val{font-size:.88rem;font-weight:600;margin-top:2px;}
+@media (min-width:480px){.pcard-grid{grid-template-columns:repeat(4,1fr);}}
+.pcard .btn-ghost{margin-top:14px;}
+.searchbar.small{margin-bottom:16px;max-width:420px;}
+#dashSearchResults{margin-bottom:10px;}
+
 /* ===== Phase 2 — Light / Dark theme ===== */
 :root[data-theme="dark"]{
   --blue:#7fb0cf; --blue-d:#6f9fbe; --teal:#5BC5C3; --teal-soft:#123a3a;
@@ -274,3 +301,11 @@ input[type=time]:focus{border-color:var(--teal);background:#fff;}
 :root[data-theme="dark"] .tb.emerg{background:#3a1e1a;color:#f0897c;}
 :root[data-theme="dark"] .refrow .rbar-wrap{background:var(--grey);}
 :root[data-theme="dark"] button.refrow:hover .rbar-wrap{background:#243140;}
+
+/* ===== Phase 3 — Patient Master (dark theme) ===== */
+:root[data-theme="dark"] .dupcard{background:var(--teal-soft);border-color:#1d4d4d;}
+:root[data-theme="dark"] .dup-opd{background:var(--white);}
+:root[data-theme="dark"] .dupchip{background:var(--white);}
+:root[data-theme="dark"] .pcard,
+:root[data-theme="dark"] .pcard-opd{background:var(--white);}
+:root[data-theme="dark"] .pcard-opd{background:var(--teal-soft);}

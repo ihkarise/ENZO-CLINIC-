@@ -1,6 +1,6 @@
 /**
  * Enzo Homoeo — Secured backend v3 (Apps Script + Google Sheet)
- * Phase 1: Foundation + Workflow.
+ * Phase 3: Patient Master + Unique Patient ID + Timeline Foundation.
  *
  * Adds the clinic consultation workflow on top of the existing appointment
  * management (book / update / delete / slot clash prevention / reminders):
@@ -15,12 +15,26 @@
  *                  F Follow-up(f, legacy) | G Call(f, legacy) | H Status(legacy) | I Notes(legacy) |
  *                  J ID | K Appt Date | L Slot |
  *                  M Stage | N Diagnosis | O Clinical Notes | P Medicine Duration |
- *                  Q Medicine Notes | R Follow-up Date | S Outcome | T Parent Appt ID
+ *                  Q Medicine Notes | R Follow-up Date | S Outcome | T Parent Appt ID |
+ *                  U Patient ID (Phase 3 — permanent link into "Patients")
  *  "OnlineRecords" A Name | B Phone | C Place | D Consultation Date | E Referred By | F Notes |
  *                  G Source Appt ID (blank for manually-entered records; set
  *                  only on records auto-created by 'complete', used to stop
  *                  a retried/duplicated 'complete' call from creating a
- *                  second record for the same consultation)
+ *                  second record for the same consultation) |
+ *                  H Patient ID (Phase 3)
+ *  "Patients"      A Patient ID | B OPD Number | C Name | D Phone | E Gender |
+ *                  F DOB | G Address | H Email | I Created Date | J Updated Date |
+ *                  K Status | L Notes
+ *                  One row per patient, forever. Patient ID (e.g. "pt...")
+ *                  is the permanent internal key every other tab links to;
+ *                  OPD Number (e.g. "ENZO-000001") is the human-facing,
+ *                  sequential, never-reused, never-edited identifier shown
+ *                  and searched everywhere. Appointments/OnlineRecords keep
+ *                  their own Name/Phone columns too (for compatibility and
+ *                  so the sheet reads fine on its own) — Patient ID is the
+ *                  source of truth for "is this the same patient", not
+ *                  name/phone matching.
  *
  * Stage is one of: Scheduled | Completed | Cancelled | NoShow. A blank
  * Stage cell (any row created before this update) is treated as Scheduled.
@@ -32,15 +46,17 @@
  * CAN below) so a restriction hidden in the UI can't be bypassed by
  * calling the API directly.
  *
- * CONCURRENCY: book/update/complete each take a short script-wide lock
- * (LockService) around their slot-availability check and the write that
- * follows it, so two requests arriving at the same instant can't both
- * pass the check and double-book the same date+slot.
+ * CONCURRENCY: book/update/complete/createPatient each take a short
+ * script-wide lock (LockService) around their availability check (or OPD
+ * sequence increment) and the write that follows it, so two requests
+ * arriving at the same instant can't both pass the check and double-book
+ * the same date+slot, or double-allocate the same OPD number.
  */
 
-const SHEET_NAME   = 'Appointments';
-const ONLINE_SHEET = 'OnlineRecords';
-const SESSION_SECS = 6 * 3600;
+const SHEET_NAME    = 'Appointments';
+const ONLINE_SHEET  = 'OnlineRecords';
+const PATIENTS_SHEET = 'Patients';
+const SESSION_SECS  = 6 * 3600;
 
 /* Phase 2: clinic configuration (opening/closing times, breaks, slot
  * duration, per-weekday capacity, notifications) is stored as one JSON blob
@@ -58,9 +74,134 @@ function getSettings(){
 // 0-based columns
 const COL  = {
   name:0, phone:1, visit:2, days:3, type:4, due:5, call:6, status:7, notes:8, id:9, appt:10, slot:11,
-  stage:12, diagnosis:13, clinicalNotes:14, medDuration:15, medNotes:16, followUp:17, outcome:18, parentId:19
+  stage:12, diagnosis:13, clinicalNotes:14, medDuration:15, medNotes:16, followUp:17, outcome:18, parentId:19,
+  patientId:20
 };
-const COLO = { name:0, phone:1, place:2, date:3, refby:4, notes:5, srcId:6 };
+const COLO = { name:0, phone:1, place:2, date:3, refby:4, notes:5, srcId:6, patientId:7 };
+const COLP = { id:0, opd:1, name:2, phone:3, gender:4, dob:5, address:6, email:7, created:8, updated:9, status:10, notes:11 };
+
+/* ===== Phase 3: Patient Master ===== */
+const PATIENT_SEQ_KEY = 'PATIENT_SEQ';
+const PATIENTS_MIGRATED_KEY = 'PATIENTS_MIGRATED_V1';
+
+/** Normalise a phone number for matching: digits only, last 10 kept (so a
+ *  country code prefix like +91 doesn't create a false "different patient"). */
+function normPhone(p){
+  const d = String(p || '').replace(/\D/g, '');
+  return d.length > 10 ? d.slice(-10) : d;
+}
+function ensurePatientsHeader(sheet){
+  if(sheet.getLastRow() === 0){
+    sheet.appendRow(['Patient ID','OPD Number','Name','Phone','Gender','DOB','Address','Email','Created Date','Updated Date','Status','Notes']);
+  }
+}
+function getPatientSeq(){
+  return parseInt(PropertiesService.getScriptProperties().getProperty(PATIENT_SEQ_KEY) || '0', 10);
+}
+function savePatientSeq(n){
+  PropertiesService.getScriptProperties().setProperty(PATIENT_SEQ_KEY, String(n));
+}
+/** Next permanent OPD number: ENZO-000001, ENZO-000002, ... Never reused,
+ *  never edited — callers must hold the script lock before calling this. */
+function nextOpdNumber(){
+  const n = getPatientSeq() + 1;
+  savePatientSeq(n);
+  return 'ENZO-' + String(n).padStart(6, '0');
+}
+/** Find an existing patient by phone, or create one. This is the single
+ *  source of truth for "is this the same patient" — used whenever a write
+ *  (book / online / a legacy caller with no patientId) needs to resolve
+ *  one. Exact-phone match only (name is never used to merge two different
+ *  phone numbers into one patient — that would risk merging two real
+ *  people). Caller must hold the script lock. */
+function findOrCreatePatient(name, phone){
+  const sheet = sheetOf(PATIENTS_SHEET);
+  ensurePatientsHeader(sheet);
+  const ph = normPhone(phone);
+  const data = sheet.getDataRange().getValues();
+  if(ph){
+    for(let i = 1; i < data.length; i++){
+      if(normPhone(data[i][COLP.phone]) === ph) return data[i][COLP.id];
+    }
+  }
+  const patientId = 'pt' + Utilities.getUuid().slice(0, 10);
+  const opd = nextOpdNumber();
+  const now = new Date();
+  sheet.appendRow([patientId, opd, name || '', phone || '', '', '', '', '', now, now, 'Active', '']);
+  return patientId;
+}
+/** One-time, self-healing migration: any Appointments/OnlineRecords row
+ *  that predates Phase 3 has a blank Patient ID. Link every such row to a
+ *  patient (matched by phone, else created fresh with the next OPD
+ *  number) without touching any other cell, and without ever creating two
+ *  patients for the same phone number. Runs as O(rows) with three batched
+ *  writes total (not one write per row), so it stays fast even at
+ *  thousands of rows. Caller must hold the script lock. */
+function ensurePatientLinks(apptSheet, onlineSheet){
+  const patientSheet = sheetOf(PATIENTS_SHEET);
+  ensurePatientsHeader(patientSheet);
+  const pdata = patientSheet.getDataRange().getValues();
+  const byPhone = new Map();
+  for(let i = 1; i < pdata.length; i++){
+    const r = pdata[i];
+    if(!r[COLP.id]) continue;
+    const ph = normPhone(r[COLP.phone]);
+    if(ph && !byPhone.has(ph)) byPhone.set(ph, r[COLP.id]);
+  }
+  let seq = getPatientSeq();
+  const newPatientRows = [];
+  function getOrCreate(name, phone){
+    const ph = normPhone(phone);
+    if(ph && byPhone.has(ph)) return byPhone.get(ph);
+    seq += 1;
+    const patientId = 'pt' + Utilities.getUuid().slice(0, 10);
+    const now = new Date();
+    newPatientRows.push([patientId, 'ENZO-' + String(seq).padStart(6, '0'), name || '', phone || '', '', '', '', '', now, now, 'Active', '']);
+    if(ph) byPhone.set(ph, patientId);
+    return patientId;
+  }
+
+  const adata = apptSheet.getDataRange().getValues();
+  const apptCol = []; let apptDirty = false;
+  for(let i = 1; i < adata.length; i++){
+    const r = adata[i];
+    if(!r[COL.name]){ apptCol.push(['']); continue; }
+    let pid = r[COL.patientId];
+    if(!pid){ pid = getOrCreate(r[COL.name], r[COL.phone]); apptDirty = true; }
+    apptCol.push([pid]);
+  }
+  if(apptDirty && apptCol.length) apptSheet.getRange(2, COL.patientId + 1, apptCol.length, 1).setValues(apptCol);
+
+  const odata = onlineSheet.getDataRange().getValues();
+  const onlineCol = []; let onlineDirty = false;
+  for(let i = 1; i < odata.length; i++){
+    const r = odata[i];
+    if(!r[COLO.name]){ onlineCol.push(['']); continue; }
+    let pid = r[COLO.patientId];
+    if(!pid){ pid = getOrCreate(r[COLO.name], r[COLO.phone]); onlineDirty = true; }
+    onlineCol.push([pid]);
+  }
+  if(onlineDirty && onlineCol.length) onlineSheet.getRange(2, COLO.patientId + 1, onlineCol.length, 1).setValues(onlineCol);
+
+  if(newPatientRows.length) patientSheet.getRange(patientSheet.getLastRow() + 1, 1, newPatientRows.length, newPatientRows[0].length).setValues(newPatientRows);
+  savePatientSeq(seq);
+}
+/** Runs ensurePatientLinks() exactly once, ever (flagged in Script
+ *  Properties) — so every read after an upgrade is a cheap map lookup, not
+ *  a full-sheet migration. Safe to call from doGet on every request. */
+function ensureMigrated(){
+  const props = PropertiesService.getScriptProperties();
+  if(props.getProperty(PATIENTS_MIGRATED_KEY) === '1') return;
+  const lock = LockService.getScriptLock();
+  if(!lock.tryLock(20000)) return; // another request is migrating right now; this request just serves un-migrated rows and the next one will see it done
+  try{
+    if(props.getProperty(PATIENTS_MIGRATED_KEY) === '1') return; // re-check inside the lock
+    ensurePatientLinks(sheetOf(SHEET_NAME), sheetOf(ONLINE_SHEET));
+    props.setProperty(PATIENTS_MIGRATED_KEY, '1');
+  } finally {
+    lock.releaseLock();
+  }
+}
 
 /* ===== ONE-TIME SETUP: edit users, run once, then delete this function =====
  * ROLE_<user> is optional. Any user without one defaults to Administrator
@@ -108,9 +249,9 @@ function roleForToken(token){
  * a hidden UI button (e.g. Complete Consultation for a Receptionist) can't
  * be bypassed by calling the API directly. Administrator: everything. */
 const CAN = {
-  Receptionist: ['book', 'update', 'delete', 'online', 'all', 'settings'],
-  Doctor: ['complete', 'online', 'all', 'settings'],
-  Administrator: ['book', 'update', 'delete', 'complete', 'online', 'all', 'settings', 'saveSettings']
+  Receptionist: ['book', 'update', 'delete', 'online', 'all', 'settings', 'patients', 'createPatient'],
+  Doctor: ['complete', 'online', 'all', 'settings', 'patients'],
+  Administrator: ['book', 'update', 'delete', 'complete', 'online', 'all', 'settings', 'saveSettings', 'patients', 'createPatient']
 };
 function allowed(token, action){
   const role = roleForToken(token);
@@ -202,6 +343,13 @@ function doPost(e){
       const dateStr = p.apptDate ? fmt(p.apptDate) : '';
       if(dateStr && dayIsFull(sheet, dateStr, p.id)) return json({ ok:false, error:'day_full' });
       if(slotTaken(sheet, dateStr, p.slot, p.id)) return json({ ok:false, error:'slot_taken' });
+      // Phase 3: every appointment links to a permanent patient. The
+      // client resolves this itself when it already knows the patient
+      // (returning-patient match, or a fresh createPatient call); if it
+      // doesn't send one (older client, or a direct API call) fall back to
+      // the same phone-match-or-create logic so no appointment is ever
+      // left unlinked.
+      const patientId = p.patientId || findOrCreatePatient(p.name, p.phone);
       sheet.appendRow([p.name, p.phone || '', p.visit ? new Date(p.visit) : '', p.days || '', p.type || '']);
       const row = sheet.getLastRow();
       setFormulas(sheet, row);
@@ -209,7 +357,8 @@ function doPost(e){
       sheet.getRange(row, 11).setValue(p.apptDate ? new Date(p.apptDate) : '');               // K appt date
       sheet.getRange(row, 12).setValue(p.slot || '');                                         // L slot
       sheet.getRange(row, 13).setValue(p.stage || 'Scheduled');                               // M stage
-      return json({ ok:true });
+      sheet.getRange(row, 21).setValue(patientId);                                            // U patient id
+      return json({ ok:true, patientId:patientId });
     }finally{
       lock.releaseLock();
     }
@@ -226,6 +375,10 @@ function doPost(e){
       sheet.getRange(row, 1, 1, 5).setValues([[p.name, p.phone || '', p.visit ? new Date(p.visit) : '', p.days || '', p.type || '']]);
       sheet.getRange(row, 11).setValue(p.apptDate ? new Date(p.apptDate) : '');
       sheet.getRange(row, 12).setValue(p.slot || '');
+      // Patient identity does not change on an ordinary edit. Only touch
+      // column U if the client explicitly sends a patientId (e.g. it was
+      // blank on a pre-Phase-3 row and got resolved on load).
+      if(p.patientId) sheet.getRange(row, 21).setValue(p.patientId);
       setFormulas(sheet, row);
       return json({ ok:true });
     }finally{
@@ -242,9 +395,35 @@ function doPost(e){
 
   if(p.action === 'online'){
     const sheet = sheetOf(ONLINE_SHEET);
-    if(sheet.getLastRow() === 0) sheet.appendRow(['Name','Phone','Place','Consultation Date','Referred By','Notes']);
-    sheet.appendRow([p.name, p.phone || '', p.place || '', p.date ? new Date(p.date) : '', p.refby || '', p.notes || '']);
-    return json({ ok:true });
+    if(sheet.getLastRow() === 0) sheet.appendRow(['Name','Phone','Place','Consultation Date','Referred By','Notes','','Patient ID']);
+    const patientId = p.patientId || findOrCreatePatient(p.name, p.phone);
+    sheet.appendRow([p.name, p.phone || '', p.place || '', p.date ? new Date(p.date) : '', p.refby || '', p.notes || '', '', patientId]);
+    return json({ ok:true, patientId:patientId });
+  }
+
+  if(p.action === 'createPatient'){
+    const sheet = sheetOf(PATIENTS_SHEET);
+    const lock = LockService.getScriptLock();
+    if(!lock.tryLock(10000)) return json({ ok:false, error:'busy' });
+    try{
+      // Unconditional create — no dedup check here. This is what powers
+      // "Create New Anyway" in the booking duplicate-detection prompt: the
+      // caller has already decided this is a different person, even if the
+      // phone matches someone else. findOrCreatePatient() (the deduping
+      // path) is used everywhere the caller has NOT made that decision.
+      ensurePatientsHeader(sheet);
+      const patientId = 'pt' + Utilities.getUuid().slice(0, 10);
+      const opd = nextOpdNumber();
+      const now = new Date();
+      sheet.appendRow([patientId, opd, p.name || '', p.phone || '', p.gender || '', p.dob ? new Date(p.dob) : '', p.address || '', p.email || '', now, now, 'Active', p.notes || '']);
+      return json({ ok:true, patient:{
+        patientId:patientId, opdNumber:opd, name:p.name || '', phone:p.phone || '', gender:p.gender || '',
+        dob:p.dob || '', address:p.address || '', email:p.email || '', notes:p.notes || '',
+        createdDate:fmt(now), updatedDate:fmt(now), status:'Active'
+      }});
+    }finally{
+      lock.releaseLock();
+    }
   }
 
   if(p.action === 'complete'){
@@ -258,7 +437,9 @@ function doPost(e){
         p.stage || 'Completed', p.diagnosis || '', p.clinicalNotes || '', p.medDuration || '',
         p.medNotes || '', p.followUp ? new Date(p.followUp) : '', p.outcome || '', ''
       ]]);
-      const src = sheet.getRange(row, 1, 1, 12).getValues()[0];
+      const src = sheet.getRange(row, 1, 1, 21).getValues()[0];
+      const patientId = src[COL.patientId] || findOrCreatePatient(src[COL.name], src[COL.phone]);
+      if(!src[COL.patientId]) sheet.getRange(row, 21).setValue(patientId);
 
       // idempotent: a retried/duplicated call with the same autoFollowUpId
       // must not create a second follow-up appointment.
@@ -271,19 +452,20 @@ function doPost(e){
         sheet.getRange(nrow, 12).setValue('');
         sheet.getRange(nrow, 13).setValue('Scheduled');
         sheet.getRange(nrow, 20).setValue(p.id);
+        sheet.getRange(nrow, 21).setValue(patientId);
       }
 
       // idempotent: a retried/duplicated call must not create a second
       // online record for the same source appointment.
       if(p.autoOnlineRecord){
         const osheet = sheetOf(ONLINE_SHEET);
-        if(osheet.getLastRow() === 0) osheet.appendRow(['Name','Phone','Place','Consultation Date','Referred By','Notes','Source Appt ID']);
+        if(osheet.getLastRow() === 0) osheet.appendRow(['Name','Phone','Place','Consultation Date','Referred By','Notes','Source Appt ID','Patient ID']);
         if(!onlineHasSource(osheet, p.id)){
-          osheet.appendRow([src[COL.name], src[COL.phone], '', src[COL.appt] || new Date(), '', p.clinicalNotes || '', p.id]);
+          osheet.appendRow([src[COL.name], src[COL.phone], '', src[COL.appt] || new Date(), '', p.clinicalNotes || '', p.id, patientId]);
         }
       }
 
-      return json({ ok:true });
+      return json({ ok:true, patientId:patientId });
     }finally{
       lock.releaseLock();
     }
@@ -302,7 +484,27 @@ function doGet(e){
     return json({ ok:true, settings: getSettings() });
   }
 
+  if(q.action === 'patients'){
+    ensureMigrated();
+    const sheet = sheetOf(PATIENTS_SHEET);
+    const data = sheet.getDataRange().getValues();
+    const out = [];
+    for(let i = 1; i < data.length; i++){
+      const r = data[i];
+      if(!r[COLP.id]) continue;
+      out.push({
+        patientId: r[COLP.id], opdNumber: r[COLP.opd], name: r[COLP.name], phone: r[COLP.phone],
+        gender: r[COLP.gender] || '', dob: r[COLP.dob] ? fmt(r[COLP.dob]) : '',
+        address: r[COLP.address] || '', email: r[COLP.email] || '',
+        createdDate: r[COLP.created] ? fmt(r[COLP.created]) : '', updatedDate: r[COLP.updated] ? fmt(r[COLP.updated]) : '',
+        status: r[COLP.status] || 'Active', notes: r[COLP.notes] || ''
+      });
+    }
+    return json(out);
+  }
+
   if(q.action === 'online'){
+    ensureMigrated();
     const sheet = sheetOf(ONLINE_SHEET);
     const data = sheet.getDataRange().getValues();
     const out = [];
@@ -310,12 +512,14 @@ function doGet(e){
       const r = data[i];
       if(!r[COLO.name]) continue;
       out.push({ name:r[COLO.name], phone:r[COLO.phone], place:r[COLO.place],
-        date:r[COLO.date] ? fmt(r[COLO.date]) : '', refby:r[COLO.refby], notes:r[COLO.notes] });
+        date:r[COLO.date] ? fmt(r[COLO.date]) : '', refby:r[COLO.refby], notes:r[COLO.notes],
+        patientId: r[COLO.patientId] || '' });
     }
     return json(out);
   }
 
   // appointments (default / action=all). Assigns an ID to any row missing one.
+  ensureMigrated();
   const sheet = sheetOf(SHEET_NAME);
   const data = sheet.getDataRange().getValues();
   const out = [];
@@ -334,7 +538,8 @@ function doGet(e){
       diagnosis: r[COL.diagnosis] || '', clinicalNotes: r[COL.clinicalNotes] || '',
       medDuration: r[COL.medDuration] || '', medNotes: r[COL.medNotes] || '',
       followUp: r[COL.followUp] ? fmt(r[COL.followUp]) : '',
-      outcome: r[COL.outcome] || '', parentId: r[COL.parentId] || ''
+      outcome: r[COL.outcome] || '', parentId: r[COL.parentId] || '',
+      patientId: r[COL.patientId] || ''
     });
   }
   return json(out);

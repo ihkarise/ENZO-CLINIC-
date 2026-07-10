@@ -35,6 +35,7 @@ export function mapAppt(r){
     followUp: r.followUp ? new Date(r.followUp) : null,
     outcome: r.outcome || '',
     parentId: r.parentId || '',
+    patientId: r.patientId || '', // Phase 3: permanent link into the Patient Master
     emergency: !!r.emergency   // future-ready: surfaced on the card when present
   };
 }

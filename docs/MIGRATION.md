@@ -80,3 +80,12 @@ explicitly assign `Receptionist` or `Doctor` to specific usernames.
 See `docs/ROLLBACK.md` — because nothing existing was overwritten, rollback
 is just redeploying the previous `EnzoBackend.gs`/site; the extra columns
 are simply ignored by the old frontend if you ever need to go back.
+
+## Migrating further, to Phase 3 (Patient Master)
+
+If you're upgrading straight from this Phase 1 base (or from Phase 2) to
+Phase 3, see [`PATIENT-MASTER.md`](PATIENT-MASTER.md) — it adds one new
+tab (`Patients`) and one new column each to `Appointments`/`OnlineRecords`,
+using the exact same append-only, backward-compatible approach described
+above, and links your existing rows to a patient automatically, once, the
+first time the app runs after upgrading. No manual step required.

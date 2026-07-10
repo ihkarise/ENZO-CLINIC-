@@ -1,14 +1,22 @@
-# Installation Guide — Phase 2 (Clinic Experience Improvements)
+# Installation Guide — Phase 2 & Phase 3
 
 > **Who this is for:** you, even if you have **never written code** and don't
 > know what most of these words mean. Read slowly. Do one step at a time.
-> Nothing here can break your patient data if you follow the order — the
-> patient information lives in your Google Sheet, and **Phase 2 does not touch
-> the Sheet at all.**
 >
 > **What "Phase 2" adds:** flexible clinic timings, per-day booking limits,
 > clearer appointment cards, a light/dark theme, a stronger search, and a new
-> **Settings** page for the administrator.
+> **Settings** page for the administrator. Phase 2 does not touch the Google
+> Sheet at all.
+>
+> **What "Phase 3" adds:** a permanent, unique identity for every patient (an
+> **OPD Number** like `ENZO-000123`), duplicate-patient detection at booking,
+> and a rebuilt Timeline and search built on that permanent identity. Phase 3
+> adds **one new Google Sheet tab** (`Patients`) — created automatically, no
+> manual sheet work — and safely links your existing appointments to it the
+> first time you open the app after upgrading. See
+> [`PATIENT-MASTER.md`](PATIENT-MASTER.md) for the plain-English explanation
+> of what this feature does and why. Already on Phase 2? Skip straight to
+> [Feature 7](#feature-7--patient-master--unique-patient-id--duplicate-detection-phase-3).
 
 ---
 
@@ -27,8 +35,7 @@
 
 ## The big picture (read this once)
 
-Phase 2 changes **twelve files** and **adds two new ones**. You will do the
-update in two places:
+Both phases together change the same **two places**:
 
 1. **The website part** (everything except `EnzoBackend.gs`) — this is on
    GitHub and updates automatically once you push the files.
@@ -36,13 +43,22 @@ update in two places:
    needs you to paste the new code and press *Deploy* once.
 
 **You do NOT need to:**
-- ❌ Change the Google Sheet (no new tabs, no new columns).
+- ❌ Manually create the `Patients` tab — the app creates it (and the
+  `Appointments`/`OnlineRecords` tabs, if they somehow didn't exist) the
+  first time it needs them.
+- ❌ Manually type any column headers.
 - ❌ Change the `WEB_APP_URL` (the app's web address stays the same).
 - ❌ Re-enter usernames or passwords.
-- ❌ Change Script Properties by hand (the app writes its own settings).
+- ❌ Change Script Properties by hand (the app writes its own settings and
+  its own patient sequence number).
+- ❌ Do anything by hand to link your existing appointments to patients —
+  the app does this automatically, once, the first time it runs after the
+  upgrade (see Feature 7, Step 6 below).
 
 Everything below is the same update explained two ways: first as a quick
-checklist, then feature-by-feature in the exact STEP format.
+checklist, then feature-by-feature in the exact STEP format. If you are
+installing fresh (not upgrading from Phase 1/2), do the Quick update
+checklist once — it covers everything, including Phase 3.
 
 ---
 
@@ -62,9 +78,12 @@ checklist, then feature-by-feature in the exact STEP format.
 ✓ js/core.js            (changed)
 ✓ js/workflow.js        (changed)
 ✓ js/booking.js         (changed)
+✓ js/online.js          (changed)
+✓ js/dashboard.js       (changed)
 ✓ js/timeline.js        (changed)
-✓ js/settings.js        (NEW file)
-✓ js/theme.js           (NEW file)
+✓ js/settings.js        (NEW file, Phase 2)
+✓ js/theme.js           (NEW file, Phase 2)
+✓ js/patients.js        (NEW file, Phase 3)
 ```
 
 1. If you got these changes from GitHub already (a branch or pull request),
@@ -72,8 +91,9 @@ checklist, then feature-by-feature in the exact STEP format.
    within a minute or two.
 2. If you are copying files by hand: open each file above on GitHub, click the
    pencil ✏️ (edit), delete everything, paste the new content, and press
-   **Commit changes**. For the two NEW files, use **Add file → Create new
-   file**, name it exactly `js/settings.js` (and `js/theme.js`), paste, commit.
+   **Commit changes**. For the NEW files, use **Add file → Create new file**,
+   name each one exactly as shown (`js/settings.js`, `js/theme.js`,
+   `js/patients.js`), paste, commit.
 
 > **Copy the WHOLE file** for every file in this list. Do not paste only part
 > of a file. Each of these is meant to fully replace the old version.
@@ -311,6 +331,85 @@ update (B). Nothing extra.
 
 ---
 
+## Feature 7 — Patient Master + Unique Patient ID + Duplicate Detection (Phase 3)
+
+Every patient now gets one permanent record with a sequential **OPD
+Number** (`ENZO-000001`, `ENZO-000002`, …) that never changes and is never
+reused. Booking a phone number that's already on file shows a "Returning
+patient" card so reception never has to guess whether it's the same
+person. Full plain-English explanation: [`PATIENT-MASTER.md`](PATIENT-MASTER.md).
+
+**STEP 1 — Files Changed**
+- ✓ `js/patients.js` (NEW — patient identity, duplicate lookup, search)
+- ✓ `js/booking.js` (duplicate-detection card, patient resolution on save)
+- ✓ `js/online.js` (links online records to a patient, adds a search box)
+- ✓ `js/timeline.js` (rebuilt on permanent patient IDs)
+- ✓ `js/dashboard.js` (quick patient search)
+- ✓ `js/app.js`, `js/store.js`, `js/api.js`, `js/workflow.js`, `js/core.js`
+  (wiring for the above)
+- ✓ `index.html`, `css/app.css` (new card/search markup and styling)
+- ✓ `EnzoBackend.gs` (the `Patients` tab, OPD numbers, duplicate lookup,
+  the one-time migration)
+
+**STEP 2 — Google Sheet** — Need Changes? **NO manual changes.** The app
+creates a new **`Patients`** tab by itself the first time it needs one —
+you don't create it, and you don't type any column headers.
+
+[Screenshot: the Google Sheet's tab bar at the bottom, showing
+`Appointments`, `OnlineRecords`, `Patients` after the first login post-upgrade]
+
+**STEP 3 — Apps Script** — Need Changes? **YES.**
+Do section **B** above: open **Extensions → Apps Script**, select all the
+code in `EnzoBackend.gs`, delete it, paste in the new version, **Save**.
+
+[Screenshot: the Apps Script editor with the new `EnzoBackend.gs` pasted in]
+
+**STEP 4 — Deploy**
+Still in Apps Script: **Deploy → Manage deployments → pencil ✏️ → Version:
+New version → Deploy → Done.** This is the same one-time backend update as
+every other feature — the web address does not change.
+
+[Screenshot: the "New version" dropdown in the Manage deployments dialog]
+
+**STEP 5 — Update GitHub**
+Do section **A** above — push/replace the website files listed in STEP 1.
+GitHub Pages rebuilds automatically within a minute or two.
+
+**STEP 6 — Verify**
+1. Open the app, sign in, and reload once. This is what triggers the
+   one-time, automatic linking of your existing appointments to patients —
+   nothing to click, it just happens in the background on that first load.
+2. Open the Google Sheet — confirm the new `Patients` tab has one row per
+   patient you've already seen, each with an OPD Number.
+3. Open `Appointments` — confirm column **U** (Patient ID) is now filled
+   in on your existing rows, not blank.
+
+**STEP 7 — Run tests**
+1. Go to **Booking**, type a **brand-new** phone number and name, finish
+   booking. Check the Sheet: a new row appeared in `Patients` with the
+   next OPD Number, and the appointment's column U matches it.
+2. Start a **new** booking using that **same** phone number again. A
+   "Returning patient" card should appear showing that OPD Number, name,
+   and last visit.
+3. Tap **Use existing**, finish booking. Confirm no second row was added
+   to `Patients`.
+4. Start a third booking with the same phone number, this time tap
+   **Create new anyway**. Confirm a **different**, new OPD Number is
+   created.
+5. Go to **Timeline**, search using one of the OPD Numbers you just saw
+   (not the name). Confirm it finds the right patient and shows their
+   profile card (OPD, Name, Phone, Age, Gender, Visit Count, Last Visit)
+   plus their full visit history.
+6. On the **Dashboard**, use the small search box at the top to find a
+   patient and confirm tapping a result opens their Timeline.
+7. **Success looks like:** typing the same phone number twice never
+   silently creates two patients unless you explicitly chose "Create new
+   anyway"; every patient has exactly one OPD Number; the Timeline shows
+   a patient's full history no matter what name or phone was typed the
+   first time you saw them.
+
+---
+
 ## If something looks wrong
 
 | What you see | What to do |
@@ -321,11 +420,16 @@ update (B). Nothing extra.
 | Dark theme didn't stick | The device blocks local storage (private browsing). Use a normal window. |
 | Nothing changed at all | The old files are still cached. Fully close and reopen the app; if using a browser, hard-refresh. |
 | Booking a closed/full day still works | You updated GitHub but **not** Apps Script. Do section **B** and deploy a new version. |
+| No "Returning patient" card ever appears | You updated GitHub but **not** Apps Script (Feature 7 needs both) — the `Patients` tab, OPD numbers, and duplicate lookup all live in `EnzoBackend.gs`. |
+| The `Patients` tab is empty even though you have old appointments | Sign in and reload the app once — the one-time linking runs on the first read after upgrading, not the moment you deploy. Confirm you're actually hitting the new backend (Apps Script → **New version** deployed, not just saved). |
+| Two OPD Numbers for one real patient | Their old records used two different phone numbers (from before this update), or "Create new anyway" was tapped by mistake. Fix it by hand — see `OPERATIONS-RUNBOOK.md` §4.1a. |
 
 ## Rolling back
 
-If you need to undo Phase 2, restore the previous versions of the changed
-files on GitHub and, in Apps Script, **Deploy → Manage deployments → Edit →
-Version → pick the previous version → Deploy**. The Google Sheet was never
-changed, so your patient data is untouched either way. See
+If you need to undo Phase 2 and/or Phase 3, restore the previous versions
+of the changed files on GitHub and, in Apps Script, **Deploy → Manage
+deployments → Edit → Version → pick the previous version → Deploy**.
+Phase 2 never touched the Google Sheet; Phase 3 only ever *added* a new
+tab and one new column to each existing tab — nothing existing was
+rewritten, so your patient data is untouched either way. See
 [`ROLLBACK.md`](ROLLBACK.md).

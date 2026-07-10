@@ -152,11 +152,11 @@ Before touching Google or GitHub, confirm the repo itself is intact.
 [Screenshot: new Google Sheet with title renamed]
 
 > **You do not need to manually create tabs or type column headers.** The
-> backend code creates the `Appointments` and `OnlineRecords` tabs
-> automatically the first time it needs them (`sheetOf()` in
-> `EnzoBackend.gs`), and the first `book`/`online` write appends the
-> correct row. The reference tables below are so you understand what
-> you'll see appear — not a manual setup task.
+> backend code creates the `Appointments`, `OnlineRecords` and `Patients`
+> tabs automatically the first time it needs them (`sheetOf()` in
+> `EnzoBackend.gs`), and the first `book`/`online`/`createPatient` write
+> appends the correct row. The reference tables below are so you understand
+> what you'll see appear — not a manual setup task.
 
 ### 5.2 Required tabs (created automatically, for your reference)
 
@@ -164,6 +164,7 @@ Before touching Google or GitHub, confirm the repo itself is intact.
 |---|---|
 | `Appointments` | Every booked appointment + its consultation outcome |
 | `OnlineRecords` | Online-lead / consultation records not tied to a specific appointment |
+| `Patients` | **(Phase 3)** One row per patient, forever — permanent Patient ID + OPD Number, linked from the two tabs above |
 
 ### 5.3 Required columns & data types
 
@@ -192,6 +193,7 @@ column in the middle once staff have started using the sheet):
 | R | Follow-up Date | Date | |
 | S | Outcome | Text | |
 | T | Parent Appt ID | Text | set only on auto-generated follow-ups |
+| U | Patient ID | Text | **(Phase 3)** links to a row in `Patients`; app-generated, don't hand-edit |
 
 **`OnlineRecords`**:
 
@@ -204,6 +206,24 @@ column in the middle once staff have started using the sheet):
 | E | Referred By | Text |
 | F | Notes | Text |
 | G | Source Appt ID | Text (blank unless auto-created) |
+| H | Patient ID | Text | **(Phase 3)** links to a row in `Patients`; app-generated |
+
+**`Patients`** (Phase 3 — new tab):
+
+| Col | Header | Type | Notes |
+|---|---|---|---|
+| A | Patient ID | Text | permanent, app-generated, never shown to staff |
+| B | OPD Number | Text | e.g. `ENZO-000123` — sequential, never reused, never edited |
+| C | Name | Text | |
+| D | Phone | Text | |
+| E | Gender | Text | optional — no booking-form field fills this in yet |
+| F | DOB | Date | optional |
+| G | Address | Text | optional |
+| H | Email | Text | optional |
+| I | Created Date | Date | |
+| J | Updated Date | Date | |
+| K | Status | Text | `Active` by default |
+| L | Notes | Text | optional |
 
 ### 5.4 Common mistakes
 
@@ -215,10 +235,11 @@ column in the middle once staff have started using the sheet):
   (`=C+D` and `=K-1`/`=F-1`). Typing over them replaces the formula with a
   static value; the reminder trigger depends on them staying formulas.
 - ⚠️ **Renaming the tabs.** The backend looks up tabs by the exact strings
-  `Appointments` and `OnlineRecords` (`SHEET_NAME`/`ONLINE_SHEET` constants
-  in `EnzoBackend.gs`). Rename either tab and the backend will silently
-  create a *new*, empty tab with the expected name the next time it writes
-  — your data will look "lost" even though the renamed tab still has it.
+  `Appointments`, `OnlineRecords` and `Patients` (`SHEET_NAME`/
+  `ONLINE_SHEET`/`PATIENTS_SHEET` constants in `EnzoBackend.gs`). Rename any
+  of them and the backend will silently create a *new*, empty tab with the
+  expected name the next time it writes — your data will look "lost" even
+  though the renamed tab still has it.
 - ⚠️ **Sharing the Sheet too broadly.** Anyone with Editor access to the
   Sheet can read every patient's diagnosis and notes directly, bypassing
   the app's login entirely. Share only with staff who need it, at the
@@ -650,6 +671,33 @@ not full regression testing.
 - [ ] Confirm the booking and the completed consultation both appear,
       newest first.
 
+### 9.7a Patient Master & duplicate detection (Phase 3)
+- [ ] Open the Google Sheet and confirm a `Patients` tab now exists with a
+      header row (`Patient ID | OPD Number | Name | ...`).
+- [ ] Book a **new** patient (a phone number you haven't used before).
+      Confirm a new row appeared in `Patients` with the next sequential OPD
+      Number (`ENZO-000001`, then `ENZO-000002`, ...) and that the
+      appointment's row in `Appointments` has a matching value in column U.
+- [ ] Start booking **another** appointment using the **same phone number**
+      as the patient above. Confirm the "Returning patient" card appears
+      showing the correct OPD Number, name and last visit.
+- [ ] Click **Use existing**, finish booking. Confirm no new row was added
+      to `Patients` — the new appointment's column U matches the existing
+      patient's Patient ID.
+- [ ] Start a third booking with that same phone number, but this time
+      click **Create new anyway**. Confirm a **second, different** OPD
+      Number is created, and the new appointment links to it, not the
+      first patient.
+- [ ] In **Timeline**, search by the OPD Number you saw on the card (not
+      the name or phone) — confirm it finds the right patient.
+- [ ] On the **Dashboard**, use the small patient search box at the top —
+      confirm it finds a patient and clicking a result opens their Timeline.
+- [ ] If you're upgrading a clinic that already had appointments before
+      this update: reload the app once, then check the Sheet — every
+      previously-blank Patient ID column (in `Appointments` and
+      `OnlineRecords`) should now be filled in, and `Patients` should have
+      one row per distinct phone number that existed before.
+
 ### 9.8 Dashboard
 - [ ] As an Administrator, open **Dashboard**. Confirm KPIs and both
       charts render (not blank, not "Charts unavailable offline" — if you
@@ -923,9 +971,15 @@ completeness.
   `EnzoBackend.gs`'s contents with the previous version (pull it from git
   history: `git show <commit>:EnzoBackend.gs`), then **Deploy → Manage
   deployments → New version → Deploy** (same URL, no frontend change needed).
-- **Because Phase 1 only ever appends Sheet columns**, rolling back either
-  half never requires undoing a data migration — see `ROLLBACK.md` for the
-  exact compatibility matrix of old-frontend/new-backend and vice versa.
+- **Because Phase 1 and Phase 3 only ever append Sheet columns/tabs**,
+  rolling back either half never requires undoing a data migration — see
+  `ROLLBACK.md` for the exact compatibility matrix of old-frontend/
+  new-backend and vice versa. Rolling back the frontend only (keeping the
+  Phase 3 backend) still works for booking/online — the old frontend
+  simply never sends a `patientId`, and the backend's own phone-match
+  fallback resolves one anyway, so nothing breaks; you only lose the
+  duplicate-detection card and the rebuilt Timeline in the UI until you
+  roll forward again.
 
 ---
 
@@ -999,7 +1053,10 @@ Run through this before announcing "we're live" to staff.
 - [ ] GitHub Pages live at its `github.io` URL, serving from the correct
       branch/root folder (§7)
 - [ ] All assets return 200 in the Network tab, no 404s (§7.6)
-- [ ] Full production test pass completed (§9) — every checkbox
+- [ ] Full production test pass completed (§9) — every checkbox, including
+      §9.7a's Patient Master / duplicate detection checks
+- [ ] `Patients` tab exists in the Sheet with a header row, and at least
+      one OPD Number (`ENZO-000001`) has been generated by a real test booking
 - [ ] At least one real staff login tested end-to-end, not just the admin
       account you set up first
 - [ ] A backup of the (still-empty-or-test-data) Sheet taken, so you have

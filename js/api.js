@@ -122,6 +122,23 @@ export async function fetchOnline(token){
   return Array.isArray(rows) ? rows : [];
 }
 
+/** The Patient Master (Phase 3) — one row per patient, loaded once at
+ *  login alongside appointments/online records so booking/timeline search
+ *  is a local, in-memory filter (no per-keystroke network round trip). */
+export async function fetchPatients(token){
+  if(!CONFIG.WEB_APP_URL) return null;
+  const r = await fetch(CONFIG.WEB_APP_URL + '?action=patients&token=' + encodeURIComponent(token));
+  const rows = await r.json();
+  return Array.isArray(rows) ? rows : [];
+}
+
+/** Create a brand-new patient row (unconditional — no dedup check; that is
+ *  the caller's decision, see js/patients.js). Uses postAction so it
+ *  inherits the offline queue like every other write. */
+export async function createPatient(token, fields){
+  return postAction({ action: 'createPatient', token, ...fields });
+}
+
 /** Read the shared clinic settings blob. Returns the settings object, or
  *  null when running without a backend (demo mode). */
 export async function fetchSettings(token){
