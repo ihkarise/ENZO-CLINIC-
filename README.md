@@ -4,34 +4,65 @@ A no-build, installable PWA for booking appointments, running consultations
 and tracking patients, backed by a Google Sheet through a Google Apps
 Script web app. Static files only — deployable straight from GitHub Pages.
 
-**Phase 2 — Clinic Experience Improvements** (on top of Phase 1 —
-Foundation + Workflow). Phase 2 adds a dynamic, admin-configurable
-scheduling engine, per-weekday booking capacity, clearer appointment cards,
-a light/dark theme, a stronger global search, and an Administrator-only
-Settings module. Billing, Inventory, Prescriptions, Patient Portal,
-Laboratory, Payments and WhatsApp Automation remain out of scope — see
-[Future extension points](#future-extension-points).
+**Phase 3 — Patient Master + Unique Patient ID + Timeline Foundation** (on
+top of Phase 2 — Clinic Experience Improvements, and Phase 1 — Foundation +
+Workflow). Phase 3 gives every patient one permanent identity — a
+sequential OPD Number (`ENZO-000001`, …) and an internal Patient ID — so
+repeat visits, the Timeline, and future modules (billing, prescriptions,
+investigations, a patient portal) never split one person's history across
+two records again. See [docs/PATIENT-MASTER.md](docs/PATIENT-MASTER.md)
+for the full plain-English explanation. Billing, Inventory, Prescriptions,
+Patient Portal, Laboratory, Payments and WhatsApp Automation remain out of
+scope — see [Future extension points](#future-extension-points).
 
 ## What it does
 
 - **Reception** books an appointment (name, phone, type, date, time slot).
+  Typing a phone number that's been seen before shows a **Returning
+  Patient** card (OPD Number, name, last visit, last diagnosis) with **Use
+  existing** / **Create new anyway** — no accidental duplicate patients.
 - The **doctor** opens **Complete Consultation** on the day, records
   diagnosis/notes/medicine duration, and the app auto-calculates the
   follow-up date, auto-books the follow-up appointment, and — for Online
   consultations — auto-creates the Online Record. Nobody re-types data.
 - Appointments live in two views: **Scheduled** (Upcoming / Today /
   Pending) and **Completed** (Completed / Cancelled / No-show).
-- **Patient Timeline** shows every appointment, consultation, diagnosis,
-  medicine and follow-up entry for a patient in one chronological list.
-- **Dashboard** shows KPIs, trend and weekday charts, and a referred-by
-  breakdown with CSV export.
+- **Patient Timeline** — search by OPD Number, Patient ID, name, phone,
+  diagnosis or notes; selecting a patient shows a Patient Profile card
+  (OPD, Name, Phone, Age, Gender, Visit Count, Last Visit) followed by
+  every appointment, online consultation, diagnosis, medicine and
+  follow-up entry, newest first.
+- **Dashboard** shows KPIs, trend and weekday charts, a referred-by
+  breakdown with CSV export, and a quick patient search that jumps
+  straight to a patient's Timeline.
 - Works offline: the shell is cached by a service worker, and writes made
   while offline are queued locally and synced automatically once the
   connection returns.
 - Three roles — **Receptionist**, **Doctor**, **Administrator** — gate what
   each signed-in user can do in the UI (see [Roles](#roles)).
 
-**Phase 2 additions:**
+**Phase 3 additions:**
+
+- **Patient Master** — a new `Patients` Google Sheet tab, one row per
+  patient, forever. Every Appointment/OnlineRecord links to it by a
+  permanent Patient ID.
+- **Unique OPD Number** — auto-generated, sequential, never reused, never
+  edited, shown and searchable everywhere (`ENZO-000001`, `ENZO-000002`, …).
+- **Duplicate detection at booking** — matches by phone; reception chooses
+  "Use existing" or "Create new anyway"; the safe default (no explicit
+  choice) is always to reuse the match.
+- **Timeline rebuilt** on permanent Patient ID instead of guessing from
+  name/phone — a changed phone number or a shortened name never splits a
+  patient's history again.
+- **One global search** (Patient ID / OPD / name / phone / diagnosis /
+  notes) reused identically across Booking, Online Records, the Dashboard
+  and the Timeline.
+- **Safe, self-healing migration** — existing appointments/online records
+  without a Patient ID are linked automatically (matched by phone) the
+  first time the app is opened after the upgrade. No manual step, no data
+  loss. See [docs/PATIENT-MASTER.md](docs/PATIENT-MASTER.md).
+
+**Phase 2 additions (still in place):**
 
 - **Dynamic Appointment Engine** — time slots are generated from
   administrator-configured opening/closing times, breaks and slot duration.
@@ -43,11 +74,9 @@ Laboratory, Payments and WhatsApp Automation remain out of scope — see
   future-ready) at a glance, without opening the appointment.
 - **Light / Dark theme** — per-device, remembered, applied before first
   paint; no UI redesign.
-- **Global search** across name, phone, appointment ID, diagnosis and notes,
-  in Scheduled, Completed and the Timeline.
 - **Settings module** (Administrator only) — one place for clinic timings,
   booking capacity, theme and notifications. Stored in a single Apps Script
-  property; **no Google Sheet change**.
+  property; no Google Sheet change.
 
 ## Architecture
 
@@ -66,7 +95,8 @@ js/
   booking.js             booking form + appointment list (Scheduled/Completed)
   consultation.js       Complete Consultation modal + automation
   online.js              Online records page
-  dashboard.js           KPIs + charts + referred-by breakdown
+  dashboard.js           KPIs + charts + referred-by breakdown + quick patient search
+  patients.js             (Phase 3) Patient Master — identity, duplicate lookup, search index
   timeline.js             patient timeline
   reminders.js           bell / "today" modal
   settings.js            (Phase 2) clinic settings + slot generation + capacity
@@ -104,7 +134,8 @@ UI without a backend.
 ## Setup
 
 1. Open the Google Sheet, extension → Apps Script, paste in
-   `EnzoBackend.gs`.
+   `EnzoBackend.gs`. A `Patients` tab is created automatically the first
+   time the app runs — nothing to create by hand.
 2. Run `setCredentials()` once (edit the usernames/passwords/roles first),
    then delete or comment it out.
 3. Deploy → New deployment → Web app, execute as yourself, access "Anyone".
@@ -120,7 +151,8 @@ See `docs/DEPLOYMENT.md` for the full walkthrough.
 
 ## Docs
 
-- [docs/INSTALLATION-GUIDE.md](docs/INSTALLATION-GUIDE.md) — **Phase 2** beginner install/upgrade, step by step
+- [docs/PATIENT-MASTER.md](docs/PATIENT-MASTER.md) — **Phase 3**: what the Patient Master is, duplicate detection, migration, in plain English
+- [docs/INSTALLATION-GUIDE.md](docs/INSTALLATION-GUIDE.md) — beginner install/upgrade, step by step
 - [docs/MIGRATION.md](docs/MIGRATION.md) — upgrading an existing production sheet/site to Phase 1
 - [docs/TESTING.md](docs/TESTING.md) — manual testing checklist
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — deploying from scratch
@@ -138,9 +170,11 @@ rewrite:
   prescription module can read/write alongside them.
 - **Inventory** — independent module + sheet; consultation medicine notes
   can later reference inventory items.
-- **Patient Portal** — the Patient Timeline aggregation in `timeline.js`
-  is already patient-centric (keyed by phone) and can be exposed as a
-  read-only view behind patient auth.
+- **Patient Portal** — ✅ enabled by Phase 3's Patient Master: every
+  patient now has a permanent Patient ID/OPD Number, so a read-only
+  portal view behind patient auth is a straightforward read against the
+  same `Patients`/`Appointments`/`OnlineRecords` tabs — no identity rework
+  needed.
 - **Laboratory** — a new `stage` value or a parallel `LabOrders` sheet,
   same append-only-column pattern used for the consultation fields.
 - **WhatsApp Automation** — `checkFollowUps()` in `EnzoBackend.gs` already
@@ -152,6 +186,11 @@ rewrite:
 
 ## Known risks
 
+- **Patient matching is phone-only.** Two patients can only be told apart
+  automatically by phone number. A patient with no phone on file, or two
+  different people who genuinely share one phone, can't be disambiguated
+  automatically — reception must use "Create new anyway" deliberately for
+  the latter. See `docs/PATIENT-MASTER.md`.
 - **Role model is coarse.** All signed-in roles can currently read the
   Patient Timeline (including diagnosis text) — there is no per-field
   medical-record ACL yet. Acceptable for a small clinic with a shared

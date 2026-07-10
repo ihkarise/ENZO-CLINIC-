@@ -1,7 +1,7 @@
 /* Enzo Homoeo — service worker
    Caches the app shell so it opens instantly and works offline.
    Bump CACHE when you change the shell file list so users get the update. */
-const CACHE = 'enzo-v7';
+const CACHE = 'enzo-v8';
 const SHELL = [
   './',
   './index.html',
@@ -19,6 +19,7 @@ const SHELL = [
   './js/online.js',
   './js/dashboard.js',
   './js/timeline.js',
+  './js/patients.js',
   './js/reminders.js',
   './js/settings.js',
   './js/theme.js',

@@ -11,6 +11,7 @@ const state = {
   role: 'Receptionist',       // Receptionist | Doctor | Administrator
   appts: [],
   onlineRecords: [],
+  patients: [],                // Patient Master (see patients.js) — permanent identity, keyed by patientId
   settings: null,             // shared clinic config (see settings.js); null until loaded
   online: navigator.onLine,
   loading: false,

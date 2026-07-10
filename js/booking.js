@@ -5,12 +5,13 @@
  * the Scheduled/Completed appointment list with search, edit, delete+undo
  * and Print Today's Schedule.
  */
-import { $, fmt, same, to12h, rid, escapeHtml, digits, apptMatches, ICON_EDIT, ICON_DEL, ICON_DONE, ICON_CALL, ICON_WA } from './core.js';
+import { $, fmt, same, to12h, rid, escapeHtml, digits, normPhone, ICON_EDIT, ICON_DEL, ICON_DONE, ICON_CALL, ICON_WA } from './core.js';
 import { store, can } from './store.js';
 import { postAction } from './api.js';
 import { mapAppt, scheduledBucket, completedBucket, isScheduled } from './workflow.js';
 import { currentSettings, generateSlots, capacityForDay } from './settings.js';
 import { toast, confirmDialog } from './ui.js';
+import { findPatientByPhone, patientById, patientSummary, createNewPatient, apptSearchMatches } from './patients.js';
 
 /** Appointments still occupying a slot on a day (excludes cancelled/no-show
  *  and, when editing, the appointment being edited). */
@@ -23,6 +24,56 @@ function dayCount(dateStr, exceptId){
 
 let onOpenConsult = null; // set by consultation.js via setConsultOpener()
 export function setConsultOpener(fn){ onOpenConsult = fn; }
+
+let onOpenTimeline = null; // set by app.js via setTimelineOpener() (opens timeline.js on a patient)
+export function setTimelineOpener(fn){ onOpenTimeline = fn; }
+
+/* ---------- Phase 3: duplicate-patient detection on the phone field ----------
+   dupMatch: the store.patients row that exactly matches the typed phone, or
+   null. dupDecision: null while the card is open awaiting a choice,
+   'existing' once reception picks "Use existing", 'new' once they pick
+   "Create new anyway". editPatientId carries an edited appointment's
+   existing patientId through to save — editing never re-runs detection. */
+let dupMatch = null, dupDecision = null, editPatientId = '';
+
+function resetDup(){
+  dupMatch = null; dupDecision = null; editPatientId = '';
+  $('dupCard').hidden = true; $('dupChip').hidden = true;
+}
+
+function renderDup(){
+  const card = $('dupCard'), chip = $('dupChip');
+  if(!dupMatch){ card.hidden = true; chip.hidden = true; return; }
+  if(dupDecision === null){
+    chip.hidden = true;
+    card.hidden = false;
+    const s = patientSummary(dupMatch.patientId);
+    $('dupOpd').textContent = dupMatch.opdNumber;
+    $('dupName').textContent = dupMatch.name || '(no name on file)';
+    $('dupMeta').textContent = s.lastVisit
+      ? `Last visit ${fmt(s.lastVisit)}${s.diagnosis ? ' · ' + s.diagnosis : ''}`
+      : 'No previous visits recorded';
+    if(!$('name').value.trim() && dupMatch.name) $('name').value = dupMatch.name;
+  }else{
+    card.hidden = true;
+    chip.hidden = false;
+    chip.className = 'dupchip' + (dupDecision === 'new' ? ' new' : '');
+    chip.textContent = dupDecision === 'existing'
+      ? `Returning patient · ${dupMatch.opdNumber} — tap to change`
+      : 'New patient will be created — tap to change';
+  }
+}
+
+function checkDuplicate(){
+  if(store.get('editingId')) return; // identity doesn't change on an edit
+  const phone = $('phone').value;
+  if(normPhone(phone).length !== 10){ dupMatch = null; dupDecision = null; renderDup(); return; }
+  const match = findPatientByPhone(phone);
+  if(!match){ dupMatch = null; dupDecision = null; renderDup(); return; }
+  if(dupMatch && dupMatch.patientId === match.patientId) return; // unchanged — don't reopen a card the user already dismissed
+  dupMatch = match; dupDecision = null;
+  renderDup();
+}
 
 /* ---------- single source of truth for slot clashes (kills the old
    client/server duplicated-but-divergent slot-check logic) ---------- */
@@ -90,6 +141,7 @@ function resetForm(){
   $('name').value = ''; $('phone').value = '';
   $('appt').value = '';
   setSeg();
+  resetDup();
   $('editBanner').hidden = true;
   $('book').querySelector('.t4-a').textContent = 'Book appointment';
   renderSlots();
@@ -115,7 +167,7 @@ function badge(a){
 function searchFilter(list){
   const q = ($('search').value || '').trim();
   if(!q) return list;
-  return list.filter(a => apptMatches(a, q));
+  return list.filter(a => apptSearchMatches(a, q));
 }
 
 function currentListFn(){
@@ -194,6 +246,8 @@ function editAppt(id){
   store.set({ editingId: id, apptTouched: true, bookingType: a.type === 'Online' ? 'Online' : 'Offline', selectedSlot: a.slot || '' });
   $('name').value = a.name || ''; $('phone').value = a.phone || '';
   setSeg();
+  editPatientId = a.patientId || ''; dupMatch = null; dupDecision = null;
+  $('dupCard').hidden = true; $('dupChip').hidden = true;
   $('appt').value = a.apptDate ? new Date(a.apptDate).toISOString().slice(0,10) : '';
   $('book').querySelector('.t4-a').textContent = 'Update appointment';
   $('editBanner').hidden = false; $('editName').textContent = a.name || 'this appointment';
@@ -223,15 +277,59 @@ async function saveAppt(){
   const id = editingId || rid();
   const type = store.get('bookingType');
   const apptDate = new Date($('appt').value + 'T00:00:00');
-  const rec = {
-    action: editingId ? 'update' : 'book', token: store.get('token'), id,
-    name, phone: $('phone').value.trim(), type,
-    apptDate: $('appt').value, slot: selectedSlot,
-    stage: editingId ? undefined : 'Scheduled'
-  };
+  const phone = $('phone').value.trim();
+
   bookInFlight = true;
   $('book').disabled = true;
   $('book').setAttribute('data-state', 'b');
+
+  // Phase 3: resolve the permanent patient identity before booking — reuse
+  // the matched patient, honour an explicit "Create new anyway", or (first
+  // time this phone/name is seen) create one now so the OPD number exists
+  // before the appointment does. Editing an existing appointment never
+  // changes who it belongs to.
+  //
+  // patientId is used for the LOCAL optimistic record straight away (so
+  // the Timeline groups it correctly even before anything syncs).
+  // patientPending tracks whether that ID is only a local placeholder (the
+  // patient itself hasn't been confirmed by the server yet — offline, or a
+  // network hiccup). A pending ID must never be sent to the server: this
+  // book/update payload may itself get queued offline, and if it carries a
+  // placeholder ID, that ID would be written into Appointments verbatim
+  // once replayed — permanently orphaning the appointment, since the real
+  // patient created by the paired createPatient write has a *different*,
+  // server-generated ID that this payload was serialized before knowing.
+  // Omitting patientId lets the server's own phone-based lookup resolve
+  // the real patient once the createPatient write (queued ahead of this
+  // one) has landed.
+  let patientId = editingId ? editPatientId : '';
+  let patientPending = false;
+  if(editingId){
+    const existing = patientById(editPatientId);
+    patientPending = !!(existing && existing.pending);
+  }else{
+    if(dupMatch && dupDecision !== 'new'){
+      patientId = dupMatch.patientId;
+      patientPending = !!dupMatch.pending;
+    }else{
+      const patient = await createNewPatient(store.get('token'), { name, phone });
+      if(!patient){
+        toast('Could not create patient record');
+        bookInFlight = false; $('book').disabled = false;
+        $('book').setAttribute('data-state', 'a');
+        return;
+      }
+      patientId = patient.patientId;
+      patientPending = !!patient.pending;
+    }
+  }
+
+  const rec = {
+    action: editingId ? 'update' : 'book', token: store.get('token'), id,
+    name, phone, type, patientId: patientPending ? '' : patientId,
+    apptDate: $('appt').value, slot: selectedSlot,
+    stage: editingId ? undefined : 'Scheduled'
+  };
   let d;
   try{
     d = await postAction(rec);
@@ -247,7 +345,7 @@ async function saveAppt(){
     return;
   }
   const obj = mapAppt({
-    id, name, phone: rec.phone, type, apptDate: rec.apptDate, slot: selectedSlot,
+    id, name, phone, type, apptDate: rec.apptDate, slot: selectedSlot, patientId,
     stage: editingId ? (store.get('appts').find(a => a.id === editingId) || {}).stage : 'Scheduled'
   });
   const appts = store.get('appts').slice();
@@ -328,6 +426,14 @@ export function initBooking(){
   $('book').addEventListener('click', saveAppt);
   $('search').addEventListener('input', renderAppts);
   $('printToday').addEventListener('click', printTodaySchedule);
+
+  let dupTimer = null;
+  $('phone').addEventListener('input', () => { clearTimeout(dupTimer); dupTimer = setTimeout(checkDuplicate, 250); });
+  $('phone').addEventListener('blur', checkDuplicate);
+  $('dupUseExisting').addEventListener('click', () => { dupDecision = 'existing'; renderDup(); });
+  $('dupCreateNew').addEventListener('click', () => { dupDecision = 'new'; renderDup(); });
+  $('dupChip').addEventListener('click', () => { dupDecision = null; renderDup(); });
+  $('dupTimeline').addEventListener('click', () => { if(dupMatch && onOpenTimeline) onOpenTimeline(dupMatch.patientId); });
 
   $('listTabs').addEventListener('click', e => {
     const b = e.target.closest('button'); if(!b) return;

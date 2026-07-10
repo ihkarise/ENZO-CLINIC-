@@ -63,3 +63,18 @@ Run the "PWA / offline shell / security" section of `docs/TESTING.md` and
 confirm the booking form shows the old fields (Visited on, Medicine given
 for, timeline card) again, and that `EnzoBackend.gs`'s `doPost` no longer
 recognizes `action: 'complete'`.
+
+## Rolling back Phase 3 (Patient Master)
+
+Same principle as above — Phase 3 only ever *appends* (one new `Patients`
+tab, one new column each on `Appointments`/`OnlineRecords`). Rolling back
+the frontend only, keeping the Phase 3 backend, works fine for booking/
+online: the old frontend never sends a `patientId`, and the backend's own
+phone-match fallback (`findOrCreatePatient`) resolves one anyway — you
+just lose the duplicate-detection card and the rebuilt Timeline/search in
+the UI until you roll forward again. Rolling back the backend only, keeping
+the Phase 3 frontend, is **not recommended**: the frontend calls
+`createPatient`/`?action=patients`, which don't exist in a pre-Phase-3
+backend, so booking's duplicate detection and the Timeline will fail.
+Either roll both back together, or keep the backend on Phase 3 and only
+roll back the frontend.

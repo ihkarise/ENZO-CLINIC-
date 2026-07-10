@@ -4,14 +4,15 @@
  */
 import { $ } from './core.js';
 import { store } from './store.js';
-import { CONFIG, isDemoMode, fetchAppts, fetchOnline, genDemoAppts, genDemoOnline, flushQueue, queueLength } from './api.js';
+import { CONFIG, isDemoMode, fetchAppts, fetchOnline, fetchPatients, genDemoAppts, genDemoOnline, flushQueue, queueLength } from './api.js';
 import { mapAppt } from './workflow.js';
+import { deriveDemoPatients } from './patients.js';
 import { initAuth, applyRoleGating } from './auth.js';
-import { initBooking, renderAppts, resetBookingForm, setConsultOpener, setNavigator } from './booking.js';
+import { initBooking, renderAppts, resetBookingForm, setConsultOpener, setNavigator, setTimelineOpener as setBookingTimelineOpener } from './booking.js';
 import { initConsultation, openConsult, setAfterSaveHook } from './consultation.js';
 import { initOnline, renderOnline } from './online.js';
-import { initDashboard, renderDash, setToast } from './dashboard.js';
-import { initTimeline } from './timeline.js';
+import { initDashboard, renderDash, setToast, setTimelineOpener as setDashTimelineOpener } from './dashboard.js';
+import { initTimeline, openPatientTimeline } from './timeline.js';
 import { initReminders, refreshToday, openTodayIfAny } from './reminders.js';
 import { initSettings, renderSettings, loadSettings } from './settings.js';
 import { initTheme, setTheme } from './theme.js';
@@ -42,12 +43,14 @@ async function loadData(){
   store.set({ loading: true });
   renderAppts(); renderOnline();
   if(CONFIG.WEB_APP_URL && token && token !== 'demo'){
-    let rawAppts = null, rawOnline = null;
+    let rawAppts = null, rawOnline = null, rawPatients = null;
     try{ rawAppts = await fetchAppts(token); }catch(e){ /* network down — leave null, see below */ }
     try{ rawOnline = await fetchOnline(token); }catch(e){ /* network down */ }
+    try{ rawPatients = await fetchPatients(token); }catch(e){ /* network down */ }
     store.set({
       appts: (rawAppts || []).filter(x => x.name).map(mapAppt),
       onlineRecords: rawOnline || [],
+      patients: rawPatients || [],
       loading: false
     });
     if(rawAppts === null && rawOnline === null){
@@ -57,7 +60,9 @@ async function loadData(){
   }
   // Demo mode only (CONFIG.WEB_APP_URL is blank) — never used as a silent
   // fallback for a configured-but-empty or unreachable production backend.
-  store.set({ appts: genDemoAppts(), onlineRecords: genDemoOnline(), loading: false });
+  const appts = genDemoAppts(), onlineRecords = genDemoOnline();
+  const patients = deriveDemoPatients(appts, onlineRecords);
+  store.set({ appts, onlineRecords, patients, loading: false });
 }
 
 async function enterApp(){
@@ -75,7 +80,13 @@ async function enterApp(){
 function maybeFlushQueue(){
   if(!navigator.onLine) return;
   flushQueue().then(({ flushed, remaining, error }) => {
-    if(flushed) toast(`Synced ${flushed} offline change${flushed > 1 ? 's' : ''}`);
+    if(flushed){
+      toast(`Synced ${flushed} offline change${flushed > 1 ? 's' : ''}`);
+      // Re-fetch so any patient created while offline (shown as "Pending
+      // sync" / a temporary OPD number) picks up its real, server-assigned
+      // Patient ID and OPD number without requiring a manual reload.
+      loadData().then(() => { renderAppts(); renderOnline(); refreshToday(); renderDash(); });
+    }
     if(remaining > 0 && error && error !== 'offline'){
       toast(`${remaining} offline change${remaining > 1 ? 's' : ''} could not sync (${error}) — will retry`, { duration: 6000 });
     }
@@ -137,6 +148,14 @@ function init(){
   initThemeToggle();
   initNav();
   initOfflineIndicator();
+
+  // Phase 3: "View timeline" (booking's Returning Patient card, Dashboard's
+  // quick patient search) always switches to the Timeline page first, then
+  // opens that patient — same pattern as setConsultOpener/setNavigator.
+  const openTimelineFor = id => { navTo('pageTimeline'); openPatientTimeline(id); };
+  setBookingTimelineOpener(openTimelineFor);
+  setDashTimelineOpener(openTimelineFor);
+
   initAuth(enterApp);
 }
 

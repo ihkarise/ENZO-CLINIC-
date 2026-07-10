@@ -63,13 +63,35 @@ need a real Apps Script deployment (marked **[live]**).
 - [ ] Opening a Completed row (the eye/view icon) shows the same modal
       read-only, with Save hidden and "Close" instead of "Cancel".
 
+## Patient Master & duplicate detection (Phase 3)
+Full checklist: `DEPLOYMENT-GUIDE.md` §9.7a and `INSTALLATION-GUIDE.md`
+Feature 7 Step 7. Quick version:
+- [ ] Booking a phone number seen before shows the Returning Patient card
+      with the correct OPD Number, name, last visit and diagnosis.
+- [ ] "Use existing" links the new appointment to that same patient (no
+      new row in the `Patients` sheet tab).
+- [ ] "Create new anyway" creates a genuinely new OPD Number even though
+      the phone matches.
+- [ ] A brand-new phone number books without any prompt and quietly gets
+      the next sequential OPD Number.
+- [ ] Editing an existing appointment never shows the duplicate card, even
+      if the phone field is touched.
+- [ ] Search by OPD Number (not name/phone) finds the right patient in
+      Booking, Online Records, the Dashboard's quick search, and the
+      Timeline.
+
 ## Patient Timeline
 - [ ] Empty search shows the prompt state, not an error.
-- [ ] Typing a name/phone lists matching patients; selecting one shows a
-      chronological list combining booked/cancelled/no-show/completed
+- [ ] Searching by OPD Number, Patient ID, name, phone, diagnosis or notes
+      lists matching patients; selecting one shows a Patient Profile card
+      (OPD, Name, Phone, Age, Gender, Visit Count, Last Visit) followed by
+      a chronological list combining booked/cancelled/no-show/completed
       appointments and Online records for that patient.
 - [ ] A freshly completed consultation (from the step above) appears in
       the same patient's timeline immediately, no reload needed.
+- [ ] A patient's history stays together even if their phone number
+      changed between visits (grouping is by permanent Patient ID, not by
+      re-matching name/phone).
 
 ## Dashboard
 - [ ] Week/Month/Year toggle updates KPIs, trend chart, weekday chart and

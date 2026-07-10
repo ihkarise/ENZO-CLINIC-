@@ -64,6 +64,17 @@
             <div class="card card-rise">
               <div class="field"><label class="label" for="name">Patient name</label><input type="text" id="name" placeholder="e.g. Anu Thomas" autocomplete="off"/></div>
               <div class="field"><label class="label" for="phone">Phone</label><input type="tel" id="phone" placeholder="e.g. 9847 0XXXXX" autocomplete="off"/></div>
+              <div class="dupcard" id="dupCard" hidden>
+                <div class="dup-h">Returning patient</div>
+                <div class="dup-row"><span class="dup-opd" id="dupOpd"></span><span class="dup-name" id="dupName"></span></div>
+                <div class="dup-meta" id="dupMeta"></div>
+                <button type="button" class="dup-timeline-link" id="dupTimeline">View timeline &rarr;</button>
+                <div class="dup-actions">
+                  <button type="button" class="btn-ghost" id="dupCreateNew">Create new anyway</button>
+                  <button type="button" class="btn-primary" id="dupUseExisting">Use existing</button>
+                </div>
+              </div>
+              <button type="button" class="dupchip" id="dupChip" hidden></button>
               <div class="field"><span class="label" id="typeLbl">Consultation type</span>
                 <div class="seg" id="seg" role="group" aria-labelledby="typeLbl">
                   <button class="seg-btn on" data-t="Offline" aria-pressed="true"><span class="ic"></span>In-clinic</button>
@@ -76,7 +87,7 @@
             <button class="btn-primary book" id="book" data-state="a"><span class="t4-swap"><span class="t4-text t4-a">Book appointment</span><span class="t4-text t4-b">Saved &#10003;</span></span></button>
           </div>
           <aside class="col-side" aria-label="Appointments">
-            <div class="searchbar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input type="search" id="search" placeholder="Search name, phone, ID, diagnosis, notes" aria-label="Search appointments"/></div>
+            <div class="searchbar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input type="search" id="search" placeholder="Search name, phone, OPD, ID, diagnosis, notes" aria-label="Search appointments"/></div>
             <div class="section-h"><h2>Appointments</h2><button class="printbtn no-print" id="printToday" data-perm="print" aria-label="Print today's schedule"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V2h12v7"/><rect x="6" y="14" width="12" height="8"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/></svg>Print today</button><span class="c" id="count"></span></div>
             <div class="listtabs" id="listTabs" role="group" aria-label="Appointment status">
               <button type="button" class="on" data-tab="scheduled">Scheduled</button>
@@ -101,12 +112,15 @@
             <button class="btn-primary book" id="oSave" data-state="a"><span class="t4-swap"><span class="t4-text t4-a">Save record</span><span class="t4-text t4-b">Saved &#10003;</span></span></button>
           </div>
           <aside class="col-side" aria-label="Saved online records">
+            <div class="searchbar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input type="search" id="oSearch" placeholder="Search name, phone, OPD, place, referred by" aria-label="Search online records"/></div>
             <div class="section-h"><h2>Online records</h2><span class="c" id="oCount"></span></div>
             <div id="oList"></div>
           </aside>
         </div>
       </section>
       <section class="page" id="pageDash" aria-label="Dashboard">
+        <div class="searchbar small"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input type="search" id="dashSearch" placeholder="Find a patient by OPD, name, phone or diagnosis" aria-label="Search patients"/></div>
+        <div id="dashSearchResults" hidden></div>
         <div class="dseg" id="dseg" role="group" aria-label="Time range">
           <button class="dseg-btn" data-r="week">Week</button>
           <button class="dseg-btn on" data-r="month">Month</button>
@@ -143,7 +157,7 @@
         </div>
       </section>
       <section class="page" id="pageTimeline" aria-label="Patient timeline">
-        <div class="searchbar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input type="search" id="tSearch" placeholder="Search by name, phone, ID, diagnosis or notes" aria-label="Search patient timeline"/></div>
+        <div class="searchbar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input type="search" id="tSearch" placeholder="Search by OPD, Patient ID, name, phone, diagnosis or notes" aria-label="Search patient timeline"/></div>
         <div id="tResults"></div>
       </section>
       <section class="page" id="pageSettings" aria-label="Settings">
