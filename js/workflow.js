@@ -34,7 +34,8 @@ export function mapAppt(r){
     medNotes: r.medNotes || '',
     followUp: r.followUp ? new Date(r.followUp) : null,
     outcome: r.outcome || '',
-    parentId: r.parentId || ''
+    parentId: r.parentId || '',
+    emergency: !!r.emergency   // future-ready: surfaced on the card when present
   };
 }
 

@@ -42,6 +42,19 @@ const SHEET_NAME   = 'Appointments';
 const ONLINE_SHEET = 'OnlineRecords';
 const SESSION_SECS = 6 * 3600;
 
+/* Phase 2: clinic configuration (opening/closing times, breaks, slot
+ * duration, per-weekday capacity, notifications) is stored as one JSON blob
+ * in a single Script Property. No new sheet tab is required — nothing in the
+ * existing Appointments/OnlineRecords tabs moves or changes. A blank/missing
+ * property means "use the app's built-in defaults", so an un-upgraded
+ * deployment keeps working exactly as before. */
+const SETTINGS_KEY = 'APP_SETTINGS';
+function getSettings(){
+  const raw = PropertiesService.getScriptProperties().getProperty(SETTINGS_KEY);
+  if(!raw) return {};
+  try{ return JSON.parse(raw); }catch(err){ return {}; }
+}
+
 // 0-based columns
 const COL  = {
   name:0, phone:1, visit:2, days:3, type:4, due:5, call:6, status:7, notes:8, id:9, appt:10, slot:11,
@@ -95,9 +108,9 @@ function roleForToken(token){
  * a hidden UI button (e.g. Complete Consultation for a Receptionist) can't
  * be bypassed by calling the API directly. Administrator: everything. */
 const CAN = {
-  Receptionist: ['book', 'update', 'delete', 'online', 'all'],
-  Doctor: ['complete', 'online', 'all'],
-  Administrator: ['book', 'update', 'delete', 'complete', 'online', 'all']
+  Receptionist: ['book', 'update', 'delete', 'online', 'all', 'settings'],
+  Doctor: ['complete', 'online', 'all', 'settings'],
+  Administrator: ['book', 'update', 'delete', 'complete', 'online', 'all', 'settings', 'saveSettings']
 };
 function allowed(token, action){
   const role = roleForToken(token);
@@ -110,22 +123,11 @@ function fmt(d){ return Utilities.formatDate(new Date(d), tz(), 'yyyy-MM-dd'); }
 
 /* find the sheet row (1-based) for a given appointment id; 0 if not found */
 function rowById(sheet, id){
-  Logger.log('[CAVEMAN] rowById called with id=%s (typeof %s)', id, typeof id);
-  Logger.log('[CAVEMAN] COL.id = %s', COL.id);
-  Logger.log('[CAVEMAN] spreadsheet open = %s', SpreadsheetApp.getActiveSpreadsheet() ? SpreadsheetApp.getActiveSpreadsheet().getName() : 'NONE');
-  Logger.log('[CAVEMAN] sheet open = %s', sheet ? sheet.getName() : 'NONE');
-  if(!id) { Logger.log('[CAVEMAN] rowById: id is falsy, returning 0 immediately'); return 0; }
+  if(!id) return 0;
   const data = sheet.getDataRange().getValues();
-  let matched = false;
   for(let i = 1; i < data.length; i++){
-    Logger.log('[CAVEMAN] row %s, col J (COL.id) raw value = %s (typeof %s), String() = "%s"', i + 1, data[i][COL.id], typeof data[i][COL.id], String(data[i][COL.id]));
-    if(String(data[i][COL.id]) === String(id)){
-      matched = true;
-      Logger.log('[CAVEMAN] MATCH at row %s', i + 1);
-      return i + 1;
-    }
+    if(String(data[i][COL.id]) === String(id)) return i + 1;
   }
-  Logger.log('[CAVEMAN] rowById finished, matched = %s', matched);
   return 0;
 }
 /* is a date+slot already used by a different, still-open appointment? */
@@ -142,6 +144,32 @@ function slotTaken(sheet, dateStr, slot, exceptId){
   }
   return false;
 }
+/* Phase 2: how many still-open (Scheduled) appointments already sit on a
+ * given date, and is that at/over the configured capacity for that weekday?
+ * Capacity comes from Settings: capacity[weekday] (0=Sunday..6=Saturday),
+ * falling back to maxPerDay, falling back to no limit. A limit of 0 means
+ * the clinic is closed that day — no bookings allowed. This is enforced
+ * here (server-side) so it cannot be bypassed by calling the API directly. */
+function dayIsFull(sheet, dateStr, exceptId){
+  const s = getSettings();
+  const wd = new Date(dateStr + 'T00:00:00').getDay();
+  const cap = (s.capacity && s.capacity[wd] !== undefined && s.capacity[wd] !== null && s.capacity[wd] !== '')
+    ? Number(s.capacity[wd])
+    : (s.maxPerDay !== undefined && s.maxPerDay !== null && s.maxPerDay !== '' ? Number(s.maxPerDay) : null);
+  if(cap === null || isNaN(cap)) return false; // no limit configured
+  const data = sheet.getDataRange().getValues();
+  let n = 0;
+  for(let i = 1; i < data.length; i++){
+    const r = data[i];
+    if(!r[COL.name]) continue;
+    if(String(r[COL.id]) === String(exceptId)) continue;
+    const stage = String(r[COL.stage] || '').trim();
+    if(stage === 'Cancelled' || stage === 'NoShow' || stage === 'Completed') continue;
+    if(r[COL.appt] && fmt(r[COL.appt]) === dateStr) n++;
+  }
+  return n >= cap;
+}
+
 /* has an online record already been auto-created for this source appointment? */
 function onlineHasSource(sheet, apptId){
   if(!apptId) return false;
@@ -157,17 +185,23 @@ function setFormulas(sheet, row){
 /* ---------- POST: login / book / update / delete / online / complete ---------- */
 function doPost(e){
   let p; try { p = JSON.parse(e.postData.contents); } catch(err){ return json({ ok:false, error:'bad request' }); }
-  Logger.log('[CAVEMAN] doPost action=%s p.id=%s (typeof %s)', p.action, p.id, typeof p.id);
   if(p.action === 'login') return json(login(p.user, p.pass));
   if(!authed(p.token)) return json({ ok:false, error:'unauthorized' });
   if(!allowed(p.token, p.action)) return json({ ok:false, error:'forbidden' });
+
+  if(p.action === 'saveSettings'){
+    PropertiesService.getScriptProperties().setProperty(SETTINGS_KEY, JSON.stringify(p.settings || {}));
+    return json({ ok:true });
+  }
 
   if(p.action === 'book'){
     const sheet = sheetOf(SHEET_NAME);
     const lock = LockService.getScriptLock();
     if(!lock.tryLock(10000)) return json({ ok:false, error:'busy' });
     try{
-      if(slotTaken(sheet, p.apptDate ? fmt(p.apptDate) : '', p.slot, p.id)) return json({ ok:false, error:'slot_taken' });
+      const dateStr = p.apptDate ? fmt(p.apptDate) : '';
+      if(dateStr && dayIsFull(sheet, dateStr, p.id)) return json({ ok:false, error:'day_full' });
+      if(slotTaken(sheet, dateStr, p.slot, p.id)) return json({ ok:false, error:'slot_taken' });
       sheet.appendRow([p.name, p.phone || '', p.visit ? new Date(p.visit) : '', p.days || '', p.type || '']);
       const row = sheet.getLastRow();
       setFormulas(sheet, row);
@@ -264,6 +298,10 @@ function doGet(e){
   if(!authed(q.token)) return json({ ok:false, error:'unauthorized' });
   if(!allowed(q.token, q.action || 'all')) return json({ ok:false, error:'forbidden' });
 
+  if(q.action === 'settings'){
+    return json({ ok:true, settings: getSettings() });
+  }
+
   if(q.action === 'online'){
     const sheet = sheetOf(ONLINE_SHEET);
     const data = sheet.getDataRange().getValues();
@@ -328,7 +366,11 @@ function checkFollowUps(){
   }
   if(!callToday.length && !dueToday.length) return;
   const m = buildMessage(callToday, dueToday);
-  if(CFG.email.on)    MailApp.sendEmail(CFG.email.to, m.subject, m.text);
+  // Phase 2: the Settings "Send the daily reminder email" toggle can turn
+  // the email off without touching this code. Missing setting = on (legacy).
+  const notif = getSettings().notifications || {};
+  const emailOn = CFG.email.on && notif.emailReminders !== false;
+  if(emailOn)         MailApp.sendEmail(CFG.email.to, m.subject, m.text);
   if(CFG.whatsapp.on) UrlFetchApp.fetch('https://api.callmebot.com/whatsapp.php?phone='+CFG.whatsapp.phone+'&text='+encodeURIComponent(m.text)+'&apikey='+CFG.whatsapp.apiKey,{muteHttpExceptions:true});
   if(CFG.telegram.on) UrlFetchApp.fetch('https://api.telegram.org/bot'+CFG.telegram.token+'/sendMessage',{method:'post',muteHttpExceptions:true,payload:{chat_id:CFG.telegram.chatId,text:m.text}});
 }

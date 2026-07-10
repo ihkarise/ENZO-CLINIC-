@@ -36,6 +36,20 @@ export function digits(s){
   return String(s || '').replace(/[^\d+]/g, '');
 }
 
+/** Global search matcher (Phase 2). Matches a query against an appointment
+ *  across name, phone, appointment ID, diagnosis, clinical/medicine notes
+ *  and outcome — so the same search works in Scheduled, Completed and the
+ *  timeline, and future modules can reuse it. Case-insensitive substring. */
+export function apptMatches(appt, query){
+  const q = String(query || '').trim().toLowerCase();
+  if(!q) return true;
+  const hay = [
+    appt.name, appt.phone, appt.id, appt.diagnosis,
+    appt.clinicalNotes, appt.medNotes, appt.outcome
+  ].map(x => String(x || '').toLowerCase()).join('  ');
+  return hay.indexOf(q) >= 0;
+}
+
 /** Escape untrusted text before it is concatenated into innerHTML. */
 export function escapeHtml(s){
   if(s === null || s === undefined) return '';

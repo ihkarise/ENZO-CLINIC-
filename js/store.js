@@ -11,6 +11,7 @@ const state = {
   role: 'Receptionist',       // Receptionist | Doctor | Administrator
   appts: [],
   onlineRecords: [],
+  settings: null,             // shared clinic config (see settings.js); null until loaded
   online: navigator.onLine,
   loading: false,
 
