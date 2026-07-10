@@ -4,12 +4,17 @@
  * one chronological view. Built client-side from data already loaded by
  * booking.js/online.js — no extra backend endpoint needed for Phase 1.
  */
-import { $, fmt, escapeHtml, apptMatches } from './core.js';
+import { $, fmt, escapeHtml, apptMatches, digits } from './core.js';
 import { store } from './store.js';
 import { STAGE } from './workflow.js';
 
+/** Same patient, different phone formatting (spaces, dashes) between the
+ *  booking form and the Online Record form, splits into two "patients" and
+ *  their history never merges — normalize with the same digits() helper
+ *  already used for tel:/wa.me links so "9847 011111" and "9847011111"
+ *  resolve to one identity. */
 function patientKey(p){
-  const phone = String(p.phone || '').trim();
+  const phone = digits(p.phone);
   return phone ? 'p:' + phone : 'n:' + (p.name || '').trim().toLowerCase();
 }
 

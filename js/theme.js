@@ -29,10 +29,16 @@ function apply(t){
   if(meta) meta.setAttribute('content', mode === 'dark' ? '#141b24' : '#557B97');
 }
 
+/** Two places can change the theme — the header quick-toggle and the
+ *  Settings page's Light/Dark/System control. Without this event, changing
+ *  it in one place left the other showing a stale selection (e.g. flip to
+ *  dark with the header button while Settings is open — its radio still
+ *  showed "Light" until the page was re-entered). */
 export function setTheme(t){
   if(t === 'system'){ try{ localStorage.removeItem(KEY); }catch(e){} }
   else{ try{ localStorage.setItem(KEY, t); }catch(e){} }
   apply(t);
+  window.dispatchEvent(new CustomEvent('enzo:themechange', { detail: { theme: t } }));
 }
 
 /** Apply the saved theme as early as possible and keep "system" mode live. */

@@ -228,6 +228,12 @@ export function initSettings(){
   ['setOpen', 'setClose', 'setSlotDur'].forEach(id => $(id).addEventListener('input', renderSlotPreview));
   $('setSave').addEventListener('click', doSave);
 
+  // Keep this page's Light/Dark/System radio in sync when the theme is
+  // changed elsewhere (the header quick-toggle) while Settings is open.
+  window.addEventListener('enzo:themechange', () => {
+    document.querySelectorAll('#setTheme button').forEach(b => b.classList.toggle('on', b.dataset.theme === getTheme()));
+  });
+
   // reflect current theme selection even before the page is first opened
   document.querySelectorAll('#setTheme button').forEach(b => b.classList.toggle('on', b.dataset.theme === getTheme()));
 }

@@ -118,15 +118,24 @@ function searchFilter(list){
   return list.filter(a => apptMatches(a, q));
 }
 
+/** While actively searching, a match must be visible regardless of which
+ *  Upcoming/Today/Pending or Completed/Cancelled/No-show sub-bucket it falls
+ *  into — the subchip counts already scan every bucket (see renderSubchips
+ *  below), so the list must too, or a real match silently disappears just
+ *  because the wrong sub-tab happens to be selected. The sub-bucket filter
+ *  still applies with an empty search box, unchanged from before. */
 function currentListFn(){
   const all = store.get('appts').filter(a => a.apptDate);
   const tab = store.get('listTab');
+  const searching = !!($('search').value || '').trim();
   if(tab === 'scheduled'){
     const sub = store.get('scheduledSub');
-    return searchFilter(all.filter(a => isScheduled(a) && scheduledBucket(a) === sub));
+    const scoped = all.filter(a => isScheduled(a) && (searching || scheduledBucket(a) === sub));
+    return searchFilter(scoped);
   }
   const sub = store.get('completedSub');
-  return searchFilter(all.filter(a => !isScheduled(a) && completedBucket(a) === sub));
+  const scoped = all.filter(a => !isScheduled(a) && (searching || completedBucket(a) === sub));
+  return searchFilter(scoped);
 }
 
 function renderSubchips(){
