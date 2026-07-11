@@ -11,7 +11,7 @@
  */
 import { rid, DAY } from './core.js';
 
-export const CONFIG = { WEB_APP_URL: "https://script.google.com/macros/s/AKfycbwheR6nx4fO4gOtCRppO0Naqcv5dcONSA2bfjYxEYxADfUq5i_5P87HsEeL6ljeUZM4Sw/exec" };
+export const CONFIG = { WEB_APP_URL: "https://script.google.com/macros/s/AKfycbypcTn8n6AI2rVZ5W-fug79gW-lO03BYq-a-snjhOygPU-Mbli2FrhhEenaJZYVcGI/exec" };
 export const isDemoMode = () => !CONFIG.WEB_APP_URL;
 
 const QUEUE_KEY = 'enzo_offline_queue_v1';
