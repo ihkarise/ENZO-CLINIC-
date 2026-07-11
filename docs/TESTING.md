@@ -72,13 +72,16 @@ Feature 7 Step 7. Quick version:
       new row in the `Patients` sheet tab).
 - [ ] "Create new anyway" creates a genuinely new OPD Number even though
       the phone matches.
-- [ ] A brand-new phone number books without any prompt and quietly gets
-      the next sequential OPD Number.
+- [ ] A brand-new phone number books without any prompt and quietly gets a
+      fresh OPD Number from the external OPD provider.
 - [ ] Editing an existing appointment never shows the duplicate card, even
       if the phone field is touched.
 - [ ] Search by OPD Number (not name/phone) finds the right patient in
       Booking, Online Records, the Dashboard's quick search, and the
       Timeline.
+- [ ] With `OPD_PROVIDER_URL` temporarily broken, booking a brand-new
+      phone number fails with a clear error and creates no patient/no
+      appointment (see `DEPLOYMENT-GUIDE.md` §9.7a).
 
 ## Patient Timeline
 - [ ] Empty search shows the prompt state, not an error.

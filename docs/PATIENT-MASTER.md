@@ -23,18 +23,30 @@ story.
 ## The fix
 
 Every patient now gets **one permanent identity** the moment they're first
-seen — a **Patient ID** (used internally) and an **OPD Number** (the
-number staff actually see and say out loud, e.g. `ENZO-000123`). Every
+seen — a **Patient ID** (used internally, never shown to staff) and an
+**OPD Number** (the number staff actually see and say out loud). Every
 appointment, every online record, and every future module (billing,
 prescriptions, lab results, the patient portal) points at that same
 identity. Nothing ever guesses again.
 
-- **OPD Number** — a simple, sequential number: `ENZO-000001`,
-  `ENZO-000002`, `ENZO-000003`, and so on. It is generated automatically,
-  is never reused, and is never edited. It's what you write on a
-  prescription, say to a patient, or search for.
+- **OPD Number** — the clinic's own OPD number, issued by the clinic's
+  existing external OPD numbering system. This app never invents OPD
+  numbers itself — the moment a brand-new patient needs one, the app asks
+  the external system for the next number and stores whatever it returns.
+  It's what you write on a prescription, say to a patient, or search for.
 - **Patient ID** — a longer internal code the app uses behind the scenes
-  to link records together. Staff don't need to type or remember it.
+  to link records together. Staff never see it and don't need to type or
+  remember it.
+
+### If the OPD numbering system is unreachable
+
+Creating a patient always asks the external OPD system for a number
+first. If that system is down, misconfigured, or times out, **the app
+does not create the patient** — no Patients row is written, no OPD Number
+is guessed or left blank. Reception sees a clear error (e.g. "Could not
+create patient record") and can retry once the OPD system is back. This
+is deliberate: a patient without a real OPD Number would be worse than no
+patient record at all.
 
 ## Where patient information lives
 
@@ -78,10 +90,11 @@ instead of comparing text.
      always to reuse the match, never to accidentally create a duplicate.
    - **Create new anyway** — for the rare case where two different people
      genuinely share a phone number (a shared clinic line, a family
-     phone). A brand-new patient and a brand-new OPD Number are created.
+     phone). A brand-new patient is created, with a fresh OPD Number
+     fetched from the external OPD system.
 4. **If no match is found**, nothing gets in the way — a new patient is
-   created quietly the moment the appointment is booked, with the next
-   OPD Number in sequence.
+   created quietly the moment the appointment is booked, with a fresh OPD
+   Number fetched from the external OPD system.
 
 Editing an *existing* appointment never re-runs this check — an
 appointment's patient never changes just because someone tweaked the date
@@ -107,7 +120,9 @@ notices which rows don't yet have a Patient ID and, in the background:
 1. Groups those rows by phone number (the same rule the booking desk uses
    — an exact phone match).
 2. Creates one Patient Master row per distinct phone number found, each
-   getting the next OPD Number in sequence.
+   getting a fresh OPD Number fetched from the external OPD system (one
+   call per new patient — this migration cannot generate OPD numbers
+   itself either).
 3. Writes the matching Patient ID back onto every appointment and online
    record row.
 
@@ -117,14 +132,19 @@ reorders anything else in your sheet. No old data is lost. If two rows
 already have the exact same phone number, they become the same patient —
 which is the whole point of this update.
 
+If the external OPD system is unreachable partway through this one-time
+migration, it stops safely — nothing partial is written, the "already
+migrated" flag is not set, and the very next time someone opens the app it
+simply tries the whole migration again.
+
 **A row with no phone number on file always becomes its own new patient
 — there is no name-matching fallback.** Matching is phone-only, on
 purpose (matching by name risks merging two different real people who
 happen to share one). If your old records include a lot of walk-ins or
-online leads with no phone recorded, expect the Patients tab and the OPD
-sequence to grow by roughly one entry per such row — this is normal, not
-a bug, and doesn't lose or corrupt anything; it just means those old rows
-can't be told apart from each other automatically.
+online leads with no phone recorded, expect the Patients tab to grow by
+roughly one entry (and one external OPD Number) per such row — this is
+normal, not a bug, and doesn't lose or corrupt anything; it just means
+those old rows can't be told apart from each other automatically.
 
 **A note on accuracy:** the migration can only match on what the data
 already has. If the same patient's old rows used two *different* phone
@@ -136,6 +156,30 @@ appointment is deliberately linked at the time it's booked. If you spot an
 old case like this, you can merge it by hand in the Google Sheet: pick the
 Patient ID you want to keep, and change the Patient ID cell on the other
 person's Appointments/OnlineRecords rows to match it.
+
+## Setting up the external OPD number provider
+
+This must be configured once, in the Apps Script project's **Script
+Properties** (Project Settings → Script Properties), before patients can
+be created:
+
+| Property | Required? | Meaning |
+|---|---|---|
+| `OPD_PROVIDER_URL` | Yes | The clinic's OPD numbering system endpoint |
+| `OPD_PROVIDER_METHOD` | No (defaults to `get`) | `get` or `post` |
+| `OPD_PROVIDER_API_KEY` | No | Sent as `Authorization: Bearer <key>` if set |
+
+`EnzoBackend.gs` includes a `setOpdProviderConfig()` helper function —
+edit the values in it, run it once from the Apps Script editor, then
+delete it (same pattern as the existing `setCredentials()` helper).
+
+The provider is expected to respond with JSON containing an OPD number
+under one of these keys: `opdNumber`, `opd_number`, `opd`, `OPDNumber` (or
+nested under `data`). Everything that talks to the provider goes through
+one function, `requestOpdNumberFromProvider()` in `EnzoBackend.gs` — if
+the clinic switches to a different OPD system later, only that one
+function (and these three properties) need to change; booking, the
+Timeline, and every other part of the app are unaffected.
 
 ## What did NOT change
 

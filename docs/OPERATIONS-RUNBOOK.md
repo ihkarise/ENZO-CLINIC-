@@ -377,6 +377,34 @@ literally doesn't come up, or shows a GitHub error).
    data won't work, but this confirms the outage is specifically GitHub
    Pages and not a total system failure.
 
+### 9.4a External OPD provider failure
+**Symptom:** booking a brand-new patient (or adding an online record for
+one) fails with an error like "Could not create patient record" or
+"opd_provider_failed", while everything else in the app (existing
+patients, editing, viewing the Timeline) keeps working normally.
+
+- This means the clinic's external OPD numbering system — the one that
+  issues OPD Numbers, which this app never generates itself — is
+  unreachable, misconfigured, or returned something unexpected.
+- **This is by design, not a bug to work around:** the app deliberately
+  refuses to create a patient without a real OPD Number rather than
+  inventing a placeholder one.
+- **Staff workaround while it's down:** returning patients can still be
+  booked/updated/completed normally (no OPD call needed). For a genuinely
+  new patient, take their details on paper and enter them once the OPD
+  system is back — do not attempt to bypass this by editing the Sheet
+  directly with a made-up OPD Number.
+- **To diagnose:** check the OPD system's own status/health first (it's
+  outside this app). If it's up but the app still fails, check Apps
+  Script's **Executions** log (Deployment Guide §10.4) for the exact
+  error from `requestOpdNumberFromProvider()`, and confirm
+  `OPD_PROVIDER_URL` (and method/key) in Script Properties are still
+  correct (Deployment Guide §6.6a) — a rotated endpoint or expired API key
+  is the most common cause.
+- If the one-time Patient ID migration (`ARCHITECTURE.md` §24.4) is what's
+  failing, it retries automatically on the next app load once the OPD
+  system is reachable again — nothing else to do.
+
 ### 9.5 Password reset
 See [§10](#10-password-reset) below — this is common enough to warrant
 its own section.

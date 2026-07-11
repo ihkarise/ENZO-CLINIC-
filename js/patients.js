@@ -98,13 +98,33 @@ export function ageFromDob(dob){
   return age >= 0 ? age : '';
 }
 
+/** Demo mode has no real backend at all — there is nothing to reach, so
+ *  there is no external OPD provider to call. This mock sequence exists
+ *  ONLY so the demo sandbox has something to display; it is never used
+ *  against a real deployment (createNewPatient() below only reaches this
+ *  when api.js's isDemoMode() is true) and is intentionally isolated here
+ *  so it's obvious it is not "how OPD numbers are produced" — that is
+ *  exclusively EnzoBackend.gs's requestOpdNumberFromProvider(), which
+ *  calls the clinic's real external OPD generator. */
+function nextDemoOpdNumber(){
+  const patients = store.get('patients');
+  return 'ENZO-' + String(patients.length + 1).padStart(6, '0');
+}
+
 /** Create a brand-new patient row unconditionally (no dedup check — that
  *  is the caller's decision, e.g. "Create new anyway" in the booking
  *  duplicate prompt, or a first-time online record). Offline-safe: if the
- *  write is queued, an optimistic local patient is added immediately so
- *  booking can proceed; the OPD number becomes final once the queued
- *  write syncs and the patient list is refetched. Demo mode (no backend at
- *  all) resolves the same way, permanently — there is nothing to sync. */
+ *  write is queued, an optimistic local patient is added immediately (OPD
+ *  Number shown as "Pending sync") so booking can proceed; the real OPD
+ *  Number — always issued by the clinic's external generator, never by
+ *  this app — becomes visible once the queued write syncs and the patient
+ *  list is refetched. Demo mode (no backend at all) resolves the same way,
+ *  permanently, using the isolated mock above.
+ *
+ *  Throws if the server explicitly rejected the write (e.g. the external
+ *  OPD provider is down or misconfigured) — this is not something retrying
+ *  the same request fixes, so the caller must stop instead of proceeding
+ *  with no patient record. */
 export async function createNewPatient(token, fields){
   const d = await apiCreatePatient(token, fields);
   if(d && d.ok && d.patient){
@@ -117,7 +137,7 @@ export async function createNewPatient(token, fields){
     const patients = store.get('patients').slice();
     const local = {
       patientId: 'pt' + rid(),
-      opdNumber: d.demo ? ('ENZO-' + String(patients.length + 1).padStart(6, '0')) : 'Pending sync',
+      opdNumber: d.demo ? nextDemoOpdNumber() : 'Pending sync',
       name: fields.name || '', phone: fields.phone || '',
       gender: fields.gender || '', dob: fields.dob || '', address: fields.address || '', email: fields.email || '',
       createdDate: toISODate(new Date()), updatedDate: toISODate(new Date()), status: 'Active', notes: fields.notes || '',
@@ -127,7 +147,7 @@ export async function createNewPatient(token, fields){
     store.set({ patients });
     return local;
   }
-  return null;
+  throw new Error((d && d.message) || 'Could not create patient record');
 }
 
 /** Global patient search: Patient ID, OPD Number, Name, Phone, Notes, plus
@@ -179,8 +199,11 @@ export function onlineSearchMatches(record, query){
 /** Demo-mode only: derive a consistent Patient Master from generated demo
  *  appointments/online records (phone, else name, as the identity key) and
  *  stamp patientId onto every record so the rest of the app never has to
- *  special-case demo mode. Real deployments get patients from the backend
- *  (already linked server-side). */
+ *  special-case demo mode. Real deployments get patients — and their real,
+ *  externally-issued OPD Numbers — from the backend (already linked
+ *  server-side; see EnzoBackend.gs's requestOpdNumberFromProvider()). The
+ *  sequential "ENZO-000001" numbers below are demo-sandbox-only fixtures,
+ *  not a numbering scheme this app owns. */
 export function deriveDemoPatients(appts, onlineRecords){
   const map = new Map();
   let seq = 0;

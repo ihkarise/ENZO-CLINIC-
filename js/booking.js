@@ -312,9 +312,11 @@ async function saveAppt(){
       patientId = dupMatch.patientId;
       patientPending = !!dupMatch.pending;
     }else{
-      const patient = await createNewPatient(store.get('token'), { name, phone });
-      if(!patient){
-        toast('Could not create patient record');
+      let patient;
+      try{
+        patient = await createNewPatient(store.get('token'), { name, phone });
+      }catch(err){
+        toast(err.message || 'Could not create patient record');
         bookInFlight = false; $('book').disabled = false;
         $('book').setAttribute('data-state', 'a');
         return;
