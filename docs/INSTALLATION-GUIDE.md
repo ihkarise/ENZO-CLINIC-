@@ -333,11 +333,12 @@ update (B). Nothing extra.
 
 ## Feature 7 — Patient Master + Unique Patient ID + Duplicate Detection (Phase 3)
 
-Every patient now gets one permanent record with a sequential **OPD
-Number** (`ENZO-000001`, `ENZO-000002`, …) that never changes and is never
-reused. Booking a phone number that's already on file shows a "Returning
-patient" card so reception never has to guess whether it's the same
-person. Full plain-English explanation: [`PATIENT-MASTER.md`](PATIENT-MASTER.md).
+Every patient now gets one permanent record with an **OPD Number** issued
+by the clinic's own external OPD numbering system (this app never
+generates one itself) that never changes and is never reused. Booking a
+phone number that's already on file shows a "Returning patient" card so
+reception never has to guess whether it's the same person. Full
+plain-English explanation: [`PATIENT-MASTER.md`](PATIENT-MASTER.md).
 
 **STEP 1 — Files Changed**
 - ✓ `js/patients.js` (NEW — patient identity, duplicate lookup, search)
@@ -364,6 +365,15 @@ code in `EnzoBackend.gs`, delete it, paste in the new version, **Save**.
 
 [Screenshot: the Apps Script editor with the new `EnzoBackend.gs` pasted in]
 
+**STEP 3a — Configure the external OPD provider** — Need Changes? **YES,
+required.** Find `setOpdProviderConfig()` in the pasted code, edit
+`OPD_PROVIDER_URL` to the clinic's real OPD-numbering endpoint (and
+`OPD_PROVIDER_METHOD`/`OPD_PROVIDER_API_KEY` if it needs them), select it
+in the function dropdown, click **Run** (same authorization flow as
+`setCredentials()`), confirm `Execution completed`, then delete/comment it
+out. Patient creation cannot succeed until this is done — see
+`PATIENT-MASTER.md` for the full contract.
+
 **STEP 4 — Deploy**
 Still in Apps Script: **Deploy → Manage deployments → pencil ✏️ → Version:
 New version → Deploy → Done.** This is the same one-time backend update as
@@ -386,16 +396,17 @@ GitHub Pages rebuilds automatically within a minute or two.
 
 **STEP 7 — Run tests**
 1. Go to **Booking**, type a **brand-new** phone number and name, finish
-   booking. Check the Sheet: a new row appeared in `Patients` with the
-   next OPD Number, and the appointment's column U matches it.
+   booking. Check the Sheet: a new row appeared in `Patients` with a real
+   OPD Number from the external provider (not something the app made up),
+   and the appointment's column U matches it.
 2. Start a **new** booking using that **same** phone number again. A
    "Returning patient" card should appear showing that OPD Number, name,
    and last visit.
 3. Tap **Use existing**, finish booking. Confirm no second row was added
    to `Patients`.
 4. Start a third booking with the same phone number, this time tap
-   **Create new anyway**. Confirm a **different**, new OPD Number is
-   created.
+   **Create new anyway**. Confirm a **different**, new OPD Number (again
+   from the external provider) is created.
 5. Go to **Timeline**, search using one of the OPD Numbers you just saw
    (not the name). Confirm it finds the right patient and shows their
    profile card (OPD, Name, Phone, Age, Gender, Visit Count, Last Visit)

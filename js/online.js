@@ -54,7 +54,7 @@ export function initOnline(){
       saveInFlight = false;
       $('oSave').disabled = false;
     }
-    if(d && d.ok === false){ toast('Could not save'); $('oSave').setAttribute('data-state', 'a'); return; }
+    if(d && d.ok === false){ toast(d.message || 'Could not save'); $('oSave').setAttribute('data-state', 'a'); return; }
     // The server always resolves/returns a patientId when reachable. When
     // the write is queued offline (or there is no backend at all — demo
     // mode) instead, fall back to a local phone match first; if there
@@ -70,8 +70,16 @@ export function initOnline(){
       if(matched) patientId = matched.patientId;
     }
     if(!patientId){
-      const patient = await createNewPatient(store.get('token'), { name, phone: rec.phone });
-      if(patient) patientId = patient.patientId;
+      // The online record itself already saved successfully (checked
+      // above) — if linking/creating the patient now fails (e.g. the
+      // external OPD provider is unreachable), the record just stays
+      // unlinked for now rather than losing the note the user already typed.
+      try{
+        const patient = await createNewPatient(store.get('token'), { name, phone: rec.phone });
+        if(patient) patientId = patient.patientId;
+      }catch(err){
+        toast(err.message || 'Could not link patient record');
+      }
     }
     const records = store.get('onlineRecords').slice();
     records.unshift({ name, place: rec.place, date: rec.date, refby: rec.refby, phone: rec.phone, notes: rec.notes, patientId });

@@ -6,9 +6,10 @@ Script web app. Static files only — deployable straight from GitHub Pages.
 
 **Phase 3 — Patient Master + Unique Patient ID + Timeline Foundation** (on
 top of Phase 2 — Clinic Experience Improvements, and Phase 1 — Foundation +
-Workflow). Phase 3 gives every patient one permanent identity — a
-sequential OPD Number (`ENZO-000001`, …) and an internal Patient ID — so
-repeat visits, the Timeline, and future modules (billing, prescriptions,
+Workflow). Phase 3 gives every patient one permanent identity — an OPD
+Number issued by the clinic's own external OPD numbering system, plus an
+internal Patient ID never shown to staff — so repeat visits, the
+Timeline, and future modules (billing, prescriptions,
 investigations, a patient portal) never split one person's history across
 two records again. See [docs/PATIENT-MASTER.md](docs/PATIENT-MASTER.md)
 for the full plain-English explanation. Billing, Inventory, Prescriptions,
@@ -46,8 +47,10 @@ scope — see [Future extension points](#future-extension-points).
 - **Patient Master** — a new `Patients` Google Sheet tab, one row per
   patient, forever. Every Appointment/OnlineRecord links to it by a
   permanent Patient ID.
-- **Unique OPD Number** — auto-generated, sequential, never reused, never
-  edited, shown and searchable everywhere (`ENZO-000001`, `ENZO-000002`, …).
+- **Unique OPD Number** — issued by the clinic's external OPD numbering
+  system (this app never generates one itself), never edited, shown and
+  searchable everywhere. If that system is unreachable, patient creation
+  stops with a clear error rather than proceeding without an OPD Number.
 - **Duplicate detection at booking** — matches by phone; reception chooses
   "Use existing" or "Create new anyway"; the safe default (no explicit
   choice) is always to reuse the match.
@@ -138,6 +141,11 @@ UI without a backend.
    time the app runs — nothing to create by hand.
 2. Run `setCredentials()` once (edit the usernames/passwords/roles first),
    then delete or comment it out.
+2a. Run `setOpdProviderConfig()` once (edit `OPD_PROVIDER_URL` — and
+   `OPD_PROVIDER_METHOD`/`OPD_PROVIDER_API_KEY` if needed — to point at the
+   clinic's external OPD numbering system), then delete or comment it out.
+   Required before any patient can be created — see
+   `docs/PATIENT-MASTER.md`.
 3. Deploy → New deployment → Web app, execute as yourself, access "Anyone".
 4. Copy the deployment URL into `CONFIG.WEB_APP_URL` in `js/api.js`.
 5. (Optional) Add a time-driven trigger on `checkFollowUps` for daily

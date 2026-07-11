@@ -521,3 +521,82 @@ risks above (migration-at-scale rehearsal; a live-deployment concurrency
 smoke test) being carried out before go-live at a clinic with a large
 existing dataset or multiple simultaneous reception devices — both are
 now explicit, tracked action items, not unknowns.
+
+## 14. Post-review change: external OPD number provider
+
+After the review above, a requirement surfaced that this app must **never
+generate OPD numbers itself** — the clinic already runs its own external
+OPD numbering system, and every OPD Number must come from it. Everywhere
+above that describes OPD Numbers as "sequential", "generated automatically
+from `PATIENT_SEQ`", or similar is now historical — it describes the
+original implementation, which this change replaces. It is left in place
+above rather than edited, since it's an accurate record of what was built
+and reviewed at the time; this section is the authoritative note on what
+changed afterward.
+
+### 14.1 What changed
+- `PATIENT_SEQ` (the Script Property sequence counter), `nextOpdNumber()`,
+  `getPatientSeq()`, `savePatientSeq()` are all removed from
+  `EnzoBackend.gs`. This project no longer has any code path that invents
+  an OPD Number.
+- A new, single integration point, `requestOpdNumberFromProvider()`, calls
+  the clinic's external OPD system (configured via the `OPD_PROVIDER_URL`
+  / `OPD_PROVIDER_METHOD` / `OPD_PROVIDER_API_KEY` Script Properties — see
+  the new `setOpdProviderConfig()` one-time-setup helper, same pattern as
+  `setCredentials()`). Response parsing is isolated in
+  `parseOpdProviderResponse()` so the exact response shape can be adjusted
+  in one place if the provider changes.
+- Every path that can create a brand-new patient —
+  `findOrCreatePatient()` (used by `book`/`update`/`online`/`complete`),
+  the `createPatient` action, and the one-time `ensurePatientLinks()`
+  migration — now calls the provider and **throws/aborts without writing
+  a Patients row if that call fails**. `doPost` catches this via a shared
+  `resolvePatient()` wrapper and returns
+  `{ ok:false, error:'opd_provider_failed', message }` instead of
+  completing the write.
+- `js/patients.js`'s `createNewPatient()` now throws (instead of quietly
+  returning `null`) when the server rejects patient creation, carrying the
+  server's message through. `booking.js` and `online.js` catch it and show
+  that message via `toast()` — reception sees why the patient wasn't
+  created, not just a generic failure.
+- Demo mode (no backend at all) still needs *something* to display, since
+  there is nothing real to call — its placeholder sequence is now isolated
+  in one clearly-labeled function, `nextDemoOpdNumber()` in
+  `js/patients.js`, with a comment making explicit that it is a
+  demo-sandbox fixture, not "how OPD numbers are produced."
+- Patient ID remains internal-only and hidden from the UI, unchanged from
+  the original Phase 3 design; OPD Number remains what's shown/searched
+  everywhere, unchanged. Only *where the OPD Number's value comes from*
+  changed.
+
+### 14.2 Verification performed
+- Syntax-checked the modified `EnzoBackend.gs` and `js/patients.js`,
+  `js/booking.js`, `js/online.js` (`node --check`, after copying `.gs` to
+  a `.js` extension for the Apps Script file since it's plain JS).
+- Unit-tested `parseOpdProviderResponse()`'s parsing contract in isolation
+  (11 cases: each supported field name, nested `data.*`, numeric coercion,
+  invalid JSON, empty object, empty string, `null` body, unrelated fields)
+  — all passed.
+- Ran a live browser regression (Playwright, demo mode) against a scratch
+  copy with `WEB_APP_URL` blanked: booked a brand-new patient end-to-end
+  (name → phone → date → slot → book), confirmed the patient was created
+  with a demo OPD Number and the appointment linked to it in the Timeline;
+  saved a new online record for a different brand-new phone number and
+  confirmed the same. No console/page errors in either flow, confirming
+  the new try/catch in `createNewPatient()`'s callers didn't break the
+  existing demo-mode paths.
+- Could not exercise the real `UrlFetchApp` call path against a real
+  external OPD endpoint in this environment (no such endpoint exists yet
+  for this clinic) — that remains a pre-go-live action item alongside the
+  two already listed in §13.10, since it's the one part of this change
+  that genuinely can't be verified without the clinic's real OPD system to
+  point at.
+
+### 14.3 Updated action items before go-live
+1. Migration-at-scale rehearsal (carried over from §13.10).
+2. Live-deployment concurrency smoke test (carried over from §13.10).
+3. **New:** configure `OPD_PROVIDER_URL` (and method/key) against the
+   clinic's real OPD system and run the full §9.7a checklist in
+   `DEPLOYMENT-GUIDE.md` end-to-end, including the "provider unreachable"
+   negative test — this is the first time this integration touches a real
+   external endpoint.
