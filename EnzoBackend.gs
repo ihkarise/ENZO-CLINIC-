@@ -738,24 +738,24 @@ function patientStatusFromRows(rows, todayStr){
 
 /** Attention score 0–5 for one patient's rows — mirrors patientPriority(). */
 function patientPriorityFromRows(rows, todayMs){
-  let score = 0;
+  let score = 0; const reasons = [];
   let last = null;
   rows.forEach(r => {
     const st = String(r[COL.stage] || '').trim();
     if(isTerminalStage(st) && r[COL.appt]){ if(!last || fmt(r[COL.appt]) > fmt(last[COL.appt])) last = r; }
   });
-  if(last && String(last[COL.stage] || '').trim() === 'NoShow') score += 2;
+  if(last && String(last[COL.stage] || '').trim() === 'NoShow'){ score += 2; reasons.push('Last visit was a no-show'); }
   const cancels = rows.filter(r => String(r[COL.stage] || '').trim() === 'Cancelled').length;
-  if(cancels >= 2) score += 2;
+  if(cancels >= 2){ score += 2; reasons.push('Cancelled ' + cancels + ' times'); }
   const overdue = rows.some(r => r[COL.parentId] &&
     (String(r[COL.stage] || '').trim() === 'Scheduled' || !String(r[COL.stage] || '').trim()) &&
     r[COL.appt] && fmt(r[COL.appt]) < fmt(new Date(todayMs)));
-  if(overdue) score += 2;
+  if(overdue){ score += 2; reasons.push('Follow-up overdue'); }
   if(last && last[COL.appt]){
     const gap = Math.round((todayMs - new Date(last[COL.appt]).getTime()) / 86400000);
-    if(gap >= 120) score += 1;
+    if(gap >= 120){ score += 1; reasons.push('No visit in ' + Math.round(gap / 30) + ' months'); }
   }
-  return score > 5 ? 5 : score;
+  return { score: score > 5 ? 5 : score, reasons: reasons };
 }
 
 /** Build the Morning Clinic Summary data + text from the sheet. */
@@ -808,7 +808,7 @@ function buildMorningReport(){
     else if(t.status.cls === 'overdue') counts.overdue++;
   });
   const withTime = todays.filter(t => t.slot);
-  const priority = todays.filter(t => t.priority >= 3).sort((a, b) => b.priority - a.priority);
+  const priority = todays.filter(t => t.priority.score >= 3).sort((a, b) => b.priority.score - a.priority.score);
 
   const to12h = s => { if(!s) return '—'; const pp = String(s).split(':'), h = +pp[0], m = +pp[1]; const ap = h >= 12 ? 'PM' : 'AM', hh = h % 12 || 12; return hh + ':' + (m < 10 ? '0' + m : m) + ' ' + ap; };
   const first = withTime[0], last = withTime[withTime.length - 1];
@@ -831,7 +831,7 @@ function buildMorningReport(){
   if(priority.length){
     L.push('');
     L.push('Priority patients:');
-    priority.forEach(p => L.push('  • ' + p.name + ' (' + p.opd + ')'));
+    priority.forEach(p => L.push('  • ' + p.name + ' (' + p.opd + ') — ' + (p.priority.reasons.join(', ') || 'needs attention')));
   }
   const text = L.join('\n');
   return { counts: counts, priority: priority, text: text,
