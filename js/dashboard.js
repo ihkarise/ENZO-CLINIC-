@@ -6,7 +6,7 @@
  */
 import { $, escapeHtml } from './core.js';
 import { store } from './store.js';
-import { indexApptsByPatient, indexOnlineByPatient, patientMatches } from './patients.js';
+import { indexApptsByPatient, indexOnlineByPatient, patientMatches, statusBadgeHtml } from './patients.js';
 
 const CC = { navy:'#557B97', teal:'#5BC5C3', steel:'#8aa6bb', coral:'#E26D5C', green:'#2E9E6B', grid:'#eef1f4', muted:'#9aa7b3' };
 const WD = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'], MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -131,7 +131,7 @@ function renderDashSearch(){
   box.hidden = false;
   box.innerHTML = matches.length
     ? matches.map(p => `<div class="appt" role="button" tabindex="0" data-dpatient="${escapeHtml(p.patientId)}" style="cursor:pointer">
-        <div class="awho"><div class="nm">${escapeHtml(p.name || '(no name on file)')}</div><div class="sub"><span class="ph">${escapeHtml(p.opdNumber)} · ${escapeHtml(p.phone)}</span></div></div>
+        <div class="awho"><div class="nm">${escapeHtml(p.name || '(no name on file)')}</div><div class="sub">${statusBadgeHtml(p.patientId, apptsByPatient)}<span class="ph">${escapeHtml(p.opdNumber)} · ${escapeHtml(p.phone)}</span></div></div>
       </div>`).join('')
     : '<div class="empty">No matching patients.</div>';
 }

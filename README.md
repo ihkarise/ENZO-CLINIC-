@@ -4,14 +4,21 @@ A no-build, installable PWA for booking appointments, running consultations
 and tracking patients, backed by a Google Sheet through a Google Apps
 Script web app. Static files only — deployable straight from GitHub Pages.
 
-**Phase 3 — Patient Master + Unique Patient ID + Timeline Foundation** (on
-top of Phase 2 — Clinic Experience Improvements, and Phase 1 — Foundation +
-Workflow). Phase 3 gives every patient one permanent identity — an OPD
-Number issued by the clinic's own external OPD numbering system, plus an
-internal Patient ID never shown to staff — so repeat visits, the
-Timeline, and future modules (billing, prescriptions,
-investigations, a patient portal) never split one person's history across
-two records again. See [docs/PATIENT-MASTER.md](docs/PATIENT-MASTER.md)
+**Phase 3.5 — Reception + Doctor daily workflow** (on top of Phase 3 —
+Patient Master, Phase 2 — Clinic Experience, and Phase 1 — Foundation +
+Workflow). Phase 3.5 adds a **morning briefing** on the Dashboard (today's
+appointments with automatic **patient status badges**, clickable summary
+counts, and a **Morning Report** reused across Email/Telegram/WhatsApp),
+**priority (attention) patients**, and switches OPD Numbers to **manual
+reception entry** (no external generator). See
+[PHASE-3.5-REPORT.md](PHASE-3.5-REPORT.md).
+
+Phase 3 gives every patient one permanent identity — an OPD Number (from
+Phase 3.5, typed by reception and checked for uniqueness) plus an internal
+Patient ID never shown to staff — so repeat visits, the Timeline, and
+future modules (billing, prescriptions, investigations, a patient portal)
+never split one person's history across two records again. See
+[docs/PATIENT-MASTER.md](docs/PATIENT-MASTER.md)
 for the full plain-English explanation. Billing, Inventory, Prescriptions,
 Patient Portal, Laboratory, Payments and WhatsApp Automation remain out of
 scope — see [Future extension points](#future-extension-points).
@@ -99,7 +106,9 @@ js/
   consultation.js       Complete Consultation modal + automation
   online.js              Online records page
   dashboard.js           KPIs + charts + referred-by breakdown + quick patient search
-  patients.js             (Phase 3) Patient Master — identity, duplicate lookup, search index
+  morning.js              (Phase 3.5) morning briefing + Morning Report (built once, reused)
+  patients.js             (Phase 3) Patient Master — identity, duplicate lookup, search index,
+                          (Phase 3.5) status badges + priority score + OPD uniqueness
   timeline.js             patient timeline
   reminders.js           bell / "today" modal
   settings.js            (Phase 2) clinic settings + slot generation + capacity
@@ -141,15 +150,15 @@ UI without a backend.
    time the app runs — nothing to create by hand.
 2. Run `setCredentials()` once (edit the usernames/passwords/roles first),
    then delete or comment it out.
-2a. Run `setOpdProviderConfig()` once (edit `OPD_PROVIDER_URL` — and
-   `OPD_PROVIDER_METHOD`/`OPD_PROVIDER_API_KEY` if needed — to point at the
-   clinic's external OPD numbering system), then delete or comment it out.
-   Required before any patient can be created — see
-   `docs/PATIENT-MASTER.md`.
+2a. **(Phase 3.5 — no OPD provider setup needed.)** OPD Numbers are now
+   typed by reception in the app and checked for uniqueness. There is no
+   external generator to configure; ignore any `setOpdProviderConfig()` /
+   `OPD_PROVIDER_*` references in older docs.
 3. Deploy → New deployment → Web app, execute as yourself, access "Anyone".
 4. Copy the deployment URL into `CONFIG.WEB_APP_URL` in `js/api.js`.
 5. (Optional) Add a time-driven trigger on `checkFollowUps` for daily
-   reminders.
+   reminders, and one on `sendMorningReport` for the daily Morning Report
+   (enable channels in Settings → Notifications).
 6. Serve the repo root as static files (GitHub Pages, or `npx serve` /
    `python3 -m http.server` locally — the app must be served over
    http(s), not opened as a `file://` URL, for ES modules and the service

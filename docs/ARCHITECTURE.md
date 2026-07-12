@@ -1,5 +1,7 @@
 # Architecture — Enzo Homoeo Medical Centre Clinic App
 
+> **⚠️ Phase 3.5 update:** OPD Numbers are now **typed by reception in the app** and validated for uniqueness — there is **no external OPD provider**. Ignore every `setOpdProviderConfig` / `OPD_PROVIDER_URL` / "external OPD numbering system" reference below; those Script Properties are unused. Phase 3.5 also adds the Dashboard morning briefing, patient **status badges**, **priority patients**, and the **Morning Report** (`sendMorningReport`, per-channel toggles in Settings → Notifications). See [`../PHASE-3.5-REPORT.md`](../PHASE-3.5-REPORT.md).
+
 > **Audience:** developers who will read, extend, or maintain this codebase.
 > **Companion docs:** [`DEPLOYMENT-GUIDE.md`](DEPLOYMENT-GUIDE.md) (how to ship it),
 > [`OPERATIONS-RUNBOOK.md`](OPERATIONS-RUNBOOK.md) (how clinic staff run it day to day),

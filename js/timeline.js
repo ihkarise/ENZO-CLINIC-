@@ -13,7 +13,7 @@
 import { $, fmt, escapeHtml } from './core.js';
 import { store } from './store.js';
 import { STAGE } from './workflow.js';
-import { patientById, patientSummary, ageFromDob, indexApptsByPatient, indexOnlineByPatient, patientMatches } from './patients.js';
+import { patientById, patientSummary, ageFromDob, indexApptsByPatient, indexOnlineByPatient, patientMatches, statusBadgeHtml } from './patients.js';
 
 function eventsFor(patientId){
   const events = [];
@@ -54,7 +54,7 @@ function renderPatientList(query){
   if(!matches.length){ box.innerHTML = '<div class="empty">No matching patients.</div>'; return; }
   box.innerHTML = matches.map(p =>
     `<div class="appt" role="button" tabindex="0" data-patient="${escapeHtml(p.patientId)}" style="cursor:pointer">
-      <div class="awho"><div class="nm">${escapeHtml(p.name || '(no name on file)')}</div><div class="sub"><span class="ph">${escapeHtml(p.opdNumber)} · ${escapeHtml(p.phone)}</span></div></div>
+      <div class="awho"><div class="nm">${escapeHtml(p.name || '(no name on file)')}</div><div class="sub">${statusBadgeHtml(p.patientId, apptsByPatient)}<span class="ph">${escapeHtml(p.opdNumber)} · ${escapeHtml(p.phone)}</span></div></div>
     </div>`).join('');
 }
 
@@ -65,11 +65,12 @@ function profileCardHtml(patient){
     ['Phone', patient.phone || '—'],
     ['Age', age !== '' ? age : '—'],
     ['Gender', patient.gender || '—'],
-    ['Visit count', String(s.visitCount)],
+    ['Total visits', String(s.visitCount)],
+    ['First visit', s.firstVisit ? fmt(s.firstVisit) : '—'],
     ['Last visit', s.lastVisit ? fmt(s.lastVisit) : '—']
   ];
   return `<div class="pcard">
-    <div class="pcard-top"><span class="pcard-opd">${escapeHtml(patient.opdNumber)}</span><span class="pcard-name">${escapeHtml(patient.name || '(no name on file)')}</span></div>
+    <div class="pcard-top"><span class="pcard-opd">${escapeHtml(patient.opdNumber)}</span><span class="pcard-name">${escapeHtml(patient.name || '(no name on file)')}</span>${statusBadgeHtml(patient.patientId)}</div>
     <div class="pcard-grid">${fields.map(([lbl, val]) => `<div><div class="pi-lbl">${escapeHtml(lbl)}</div><div class="pi-val">${escapeHtml(String(val))}</div></div>`).join('')}</div>
   </div>`;
 }

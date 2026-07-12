@@ -11,7 +11,7 @@ import { postAction } from './api.js';
 import { mapAppt, scheduledBucket, completedBucket, isScheduled } from './workflow.js';
 import { currentSettings, generateSlots, capacityForDay } from './settings.js';
 import { toast, confirmDialog } from './ui.js';
-import { findPatientByPhone, patientById, patientSummary, createNewPatient, apptSearchMatches } from './patients.js';
+import { findPatientByPhone, patientById, patientSummary, createNewPatient, apptSearchMatches, opdExists, statusBadgeHtml, indexApptsByPatient } from './patients.js';
 
 /** Appointments still occupying a slot on a day (excludes cancelled/no-show
  *  and, when editing, the appointment being edited). */
@@ -39,6 +39,37 @@ let dupMatch = null, dupDecision = null, editPatientId = '';
 function resetDup(){
   dupMatch = null; dupDecision = null; editPatientId = '';
   $('dupCard').hidden = true; $('dupChip').hidden = true;
+  updateOpdField();
+}
+
+/* ---------- Phase 3.5: manual OPD Number entry ----------
+   Reception types the OPD Number for a brand-new patient (no automatic
+   generation, no external provider). The field is shown only when this
+   booking will actually create a new patient — hidden when editing or when
+   reusing a matched returning patient (that patient already has an OPD). */
+function willCreateNewPatient(){
+  if(store.get('editingId')) return false;
+  if(dupMatch && dupDecision !== 'new') return false; // reusing existing
+  return true;
+}
+
+function updateOpdField(){
+  const field = $('opdField');
+  if(!field) return;
+  const show = willCreateNewPatient();
+  field.hidden = !show;
+  if(show) validateOpd();
+}
+
+/** Live uniqueness feedback for the typed OPD Number. Returns true when the
+ *  value is a non-empty, not-already-taken OPD. */
+function validateOpd(){
+  const note = $('opdNote');
+  const val = $('opd').value.trim();
+  if(!val){ if(note){ note.textContent = 'Required for a new patient.'; note.style.color = ''; } return false; }
+  if(opdExists(val)){ if(note){ note.textContent = 'That OPD Number is already used by another patient.'; note.style.color = 'var(--coral)'; } return false; }
+  if(note){ note.textContent = 'Available.'; note.style.color = 'var(--green)'; }
+  return true;
 }
 
 function renderDup(){
@@ -62,6 +93,7 @@ function renderDup(){
       ? `Returning patient · ${dupMatch.opdNumber} — tap to change`
       : 'New patient will be created — tap to change';
   }
+  updateOpdField();
 }
 
 function checkDuplicate(){
@@ -140,6 +172,7 @@ function resetForm(){
   store.set({ editingId: null, apptTouched: false, selectedSlot: '', bookingType: 'Offline' });
   $('name').value = ''; $('phone').value = '';
   $('appt').value = '';
+  if($('opd')) $('opd').value = '';
   setSeg();
   resetDup();
   $('editBanner').hidden = true;
@@ -217,6 +250,7 @@ export function renderAppts(){
     return;
   }
   const editingId = store.get('editingId');
+  const idx = indexApptsByPatient();
   box.innerHTML = list.map(a => {
     const d = new Date(a.apptDate), isToday = same(d, new Date());
     const overdue = !isToday && isScheduled(a) && scheduledBucket(a) === 'pending';
@@ -234,7 +268,7 @@ export function renderAppts(){
     ].join('');
     return `<div class="appt ${isToday ? 'today' : ''} ${overdue ? 'overdue' : ''}" ${a.id === editingId ? 'style="box-shadow:0 0 0 1.5px var(--teal),var(--shadow)"' : ''}>
       <div class="ad"><div class="add">${dd}</div><div class="ats">${a.slot ? to12h(a.slot) : '—'}</div></div>
-      <div class="awho"><div class="nm">${escapeHtml(a.name)}</div><div class="sub">${badge(a)}<span class="ph">${escapeHtml(a.phone)}</span></div></div>
+      <div class="awho"><div class="nm">${escapeHtml(a.name)}</div><div class="sub">${badge(a)}${statusBadgeHtml(a.patientId, idx)}<span class="ph">${escapeHtml(a.phone)}</span></div></div>
       <div class="aact">${actions}</div>
     </div>`;
   }).join('');
@@ -248,6 +282,7 @@ function editAppt(id){
   setSeg();
   editPatientId = a.patientId || ''; dupMatch = null; dupDecision = null;
   $('dupCard').hidden = true; $('dupChip').hidden = true;
+  updateOpdField(); // editing never creates a patient — hides the OPD field
   $('appt').value = a.apptDate ? new Date(a.apptDate).toISOString().slice(0,10) : '';
   $('book').querySelector('.t4-a').textContent = 'Update appointment';
   $('editBanner').hidden = false; $('editName').textContent = a.name || 'this appointment';
@@ -312,9 +347,24 @@ async function saveAppt(){
       patientId = dupMatch.patientId;
       patientPending = !!dupMatch.pending;
     }else{
+      const opdNumber = $('opd').value.trim();
+      if(!opdNumber){
+        toast('Enter the OPD Number for this new patient');
+        bookInFlight = false; $('book').disabled = false;
+        $('book').setAttribute('data-state', 'a');
+        $('opdField').hidden = false; validateOpd(); $('opd').focus();
+        return;
+      }
+      if(opdExists(opdNumber)){
+        toast('That OPD Number is already used — enter a unique one');
+        bookInFlight = false; $('book').disabled = false;
+        $('book').setAttribute('data-state', 'a');
+        validateOpd(); $('opd').focus();
+        return;
+      }
       let patient;
       try{
-        patient = await createNewPatient(store.get('token'), { name, phone });
+        patient = await createNewPatient(store.get('token'), { name, phone, opdNumber });
       }catch(err){
         toast(err.message || 'Could not create patient record');
         bookInFlight = false; $('book').disabled = false;
@@ -432,6 +482,8 @@ export function initBooking(){
   let dupTimer = null;
   $('phone').addEventListener('input', () => { clearTimeout(dupTimer); dupTimer = setTimeout(checkDuplicate, 250); });
   $('phone').addEventListener('blur', checkDuplicate);
+  $('opd').addEventListener('input', validateOpd);
+  $('name').addEventListener('input', updateOpdField);
   $('dupUseExisting').addEventListener('click', () => { dupDecision = 'existing'; renderDup(); });
   $('dupCreateNew').addEventListener('click', () => { dupDecision = 'new'; renderDup(); });
   $('dupChip').addEventListener('click', () => { dupDecision = null; renderDup(); });

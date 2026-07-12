@@ -11,9 +11,10 @@
  * mirrors the same phone-normalisation rule so the UI's duplicate prompt
  * matches what the server will actually do.
  */
-import { normPhone, rid, toISODate, apptMatches } from './core.js';
+import { normPhone, rid, toISODate, apptMatches, DAY } from './core.js';
 import { store } from './store.js';
 import { createPatient as apiCreatePatient } from './api.js';
+import { STAGE, isScheduled, isTerminal, startOfToday } from './workflow.js';
 
 export function patientById(patientId){
   if(!patientId) return null;
@@ -77,11 +78,108 @@ export function patientSummary(patientId){
   const byDateDesc = appts.filter(a => a.apptDate).sort((a, b) => new Date(b.apptDate) - new Date(a.apptDate));
   const lastCompleted = appts.filter(a => a.stage === 'Completed' && a.apptDate)
     .sort((a, b) => new Date(b.apptDate) - new Date(a.apptDate))[0];
+  const byDateAsc = byDateDesc.slice().reverse();
   return {
     visitCount: appts.length + online.length,
+    firstVisit: byDateAsc[0] ? byDateAsc[0].apptDate : null,
     lastVisit: byDateDesc[0] ? byDateDesc[0].apptDate : null,
     diagnosis: lastCompleted ? lastCompleted.diagnosis : ''
   };
+}
+
+/* ===== Phase 3.5: patient status badges + attention (priority) score =====
+ *
+ * A patient's badge is derived purely from their appointment history — the
+ * caller never has to open the Timeline. One shared function so Dashboard,
+ * Booking, Timeline, Patient Profile and Search all show the exact same
+ * badge for the same patient. Rules (from the phase spec):
+ *   never completed a consultation  -> NEW      (green)
+ *   completed at least one           -> RETURN   (blue) then coloured by the
+ *                                       last visit's outcome:
+ *   last visit Completed             -> GREEN
+ *   last visit Cancelled             -> ORANGE
+ *   last visit No-show               -> RED
+ *   a follow-up appointment is overdue -> PURPLE (takes precedence)
+ *
+ * `apptsByPatient` is the optional index from indexApptsByPatient(); pass it
+ * when scanning many patients so this stays O(1) per patient. */
+export const STATUS = {
+  NEW:       { cls: 'new',    label: 'NEW' },
+  RETURN:    { cls: 'return', label: 'RETURN' },
+  COMPLETED: { cls: 'done',   label: 'LAST COMPLETED' },
+  CANCELLED: { cls: 'cancel', label: 'LAST CANCELLED' },
+  NOSHOW:    { cls: 'noshow', label: 'LAST NO-SHOW' },
+  OVERDUE:   { cls: 'overdue',label: 'FOLLOW-UP OVERDUE' }
+};
+
+/** A follow-up (parentId set) still Scheduled with a past date = overdue. */
+function hasOverdueFollowUp(appts, today){
+  return appts.some(a => a.parentId && isScheduled(a) && a.apptDate && new Date(a.apptDate) < today);
+}
+
+/** The single status badge for a patient. Returns { cls, label, type } where
+ *  type is 'NEW' or 'RETURN' (the underlying patient class) and cls/label
+ *  drive rendering. */
+export function patientStatus(patientId, apptsByPatient){
+  const appts = apptsByPatient ? (apptsByPatient.get(patientId) || []) : recordsFor(patientId).appts;
+  const completed = appts.filter(a => a.stage === STAGE.COMPLETED);
+  const type = completed.length ? 'RETURN' : 'NEW';
+  const today = startOfToday();
+  if(hasOverdueFollowUp(appts, today)) return { ...STATUS.OVERDUE, type };
+  const lastTerminal = appts.filter(a => isTerminal(a) && a.apptDate)
+    .sort((a, b) => new Date(b.apptDate) - new Date(a.apptDate))[0];
+  if(type === 'NEW'){
+    // A brand-new patient whose only closed visit was a no-show/cancellation
+    // should still surface that, otherwise fall back to the NEW badge.
+    if(lastTerminal && lastTerminal.stage === STAGE.NOSHOW) return { ...STATUS.NOSHOW, type };
+    if(lastTerminal && lastTerminal.stage === STAGE.CANCELLED) return { ...STATUS.CANCELLED, type };
+    return { ...STATUS.NEW, type };
+  }
+  if(lastTerminal && lastTerminal.stage === STAGE.NOSHOW) return { ...STATUS.NOSHOW, type };
+  if(lastTerminal && lastTerminal.stage === STAGE.CANCELLED) return { ...STATUS.CANCELLED, type };
+  return { ...STATUS.COMPLETED, type };
+}
+
+/** Attention (priority) score 0–5 with the reasons behind it — a simple,
+ *  transparent rule set (no AI). Higher = needs attention sooner; the
+ *  morning briefing sorts priority patients first. */
+export function patientPriority(patientId, apptsByPatient){
+  const appts = apptsByPatient ? (apptsByPatient.get(patientId) || []) : recordsFor(patientId).appts;
+  const today = startOfToday();
+  let score = 0; const reasons = [];
+  const terminal = appts.filter(a => isTerminal(a) && a.apptDate)
+    .sort((a, b) => new Date(b.apptDate) - new Date(a.apptDate));
+  const last = terminal[0];
+  if(last && last.stage === STAGE.NOSHOW){ score += 2; reasons.push('Last visit was a no-show'); }
+  const cancels = appts.filter(a => a.stage === STAGE.CANCELLED).length;
+  if(cancels >= 2){ score += 2; reasons.push(`Cancelled ${cancels} times`); }
+  if(hasOverdueFollowUp(appts, today)){ score += 2; reasons.push('Follow-up overdue'); }
+  if(last && last.apptDate){
+    const gap = Math.round((today - new Date(last.apptDate)) / DAY);
+    if(gap >= 120){ score += 1; reasons.push(`No visit in ${Math.round(gap / 30)} months`); }
+  }
+  if(score > 5) score = 5;
+  return { score, reasons, stars: '★'.repeat(score) + '☆'.repeat(5 - score) };
+}
+
+/** Ready-to-inject HTML for a patient's status badge (Dashboard, Booking,
+ *  Timeline, Profile, Search all use this so the badge is identical
+ *  everywhere). Labels are a fixed internal set — safe to inline. Returns
+ *  '' when the patient can't be resolved (no patientId yet). */
+export function statusBadgeHtml(patientId, apptsByPatient){
+  if(!patientId) return '';
+  const s = patientStatus(patientId, apptsByPatient);
+  return `<span class="tb ${s.cls}"><span class="d"></span>${s.label}</span>`;
+}
+
+/** True if an OPD Number is already taken by another patient (case- and
+ *  whitespace-insensitive). Powers the manual-OPD uniqueness check in
+ *  Booking. Optionally ignore one patientId (when editing that patient). */
+export function opdExists(opdNumber, exceptPatientId){
+  const target = String(opdNumber || '').trim().toLowerCase();
+  if(!target) return false;
+  return store.get('patients').some(p =>
+    p.patientId !== exceptPatientId && String(p.opdNumber || '').trim().toLowerCase() === target);
 }
 
 /** Whole years between a DOB (ISO-ish string/Date) and today, or '' if the
@@ -98,14 +196,11 @@ export function ageFromDob(dob){
   return age >= 0 ? age : '';
 }
 
-/** Demo mode has no real backend at all — there is nothing to reach, so
- *  there is no external OPD provider to call. This mock sequence exists
- *  ONLY so the demo sandbox has something to display; it is never used
- *  against a real deployment (createNewPatient() below only reaches this
- *  when api.js's isDemoMode() is true) and is intentionally isolated here
- *  so it's obvious it is not "how OPD numbers are produced" — that is
- *  exclusively EnzoBackend.gs's requestOpdNumberFromProvider(), which
- *  calls the clinic's real external OPD generator. */
+/** Demo mode has no real backend, so there is nowhere to store a
+ *  reception-entered OPD Number. This local sequence exists ONLY so the
+ *  demo sandbox still shows a plausible number when the user leaves the OPD
+ *  field blank. In a real deployment reception types the OPD Number and it
+ *  is validated for uniqueness (see opdExists / EnzoBackend.gs). */
 function nextDemoOpdNumber(){
   const patients = store.get('patients');
   return 'ENZO-' + String(patients.length + 1).padStart(6, '0');
@@ -113,18 +208,16 @@ function nextDemoOpdNumber(){
 
 /** Create a brand-new patient row unconditionally (no dedup check — that
  *  is the caller's decision, e.g. "Create new anyway" in the booking
- *  duplicate prompt, or a first-time online record). Offline-safe: if the
- *  write is queued, an optimistic local patient is added immediately (OPD
- *  Number shown as "Pending sync") so booking can proceed; the real OPD
- *  Number — always issued by the clinic's external generator, never by
- *  this app — becomes visible once the queued write syncs and the patient
- *  list is refetched. Demo mode (no backend at all) resolves the same way,
- *  permanently, using the isolated mock above.
+ *  duplicate prompt, or a first-time online record). `fields.opdNumber` is
+ *  the OPD Number reception typed (required for a booking; may be blank for
+ *  an auto-linked online record, where the backend assigns the next local
+ *  number). Offline-safe: if the write is queued, an optimistic local
+ *  patient is added immediately carrying the typed OPD Number so booking
+ *  can proceed; it syncs to the server verbatim once back online.
  *
- *  Throws if the server explicitly rejected the write (e.g. the external
- *  OPD provider is down or misconfigured) — this is not something retrying
- *  the same request fixes, so the caller must stop instead of proceeding
- *  with no patient record. */
+ *  Throws if the server explicitly rejected the write (e.g. the OPD Number
+ *  is already taken) — this is not something retrying the same request
+ *  fixes, so the caller must stop and surface the message instead. */
 export async function createNewPatient(token, fields){
   const d = await apiCreatePatient(token, fields);
   if(d && d.ok && d.patient){
@@ -137,7 +230,11 @@ export async function createNewPatient(token, fields){
     const patients = store.get('patients').slice();
     const local = {
       patientId: 'pt' + rid(),
-      opdNumber: d.demo ? nextDemoOpdNumber() : 'Pending sync',
+      // Reception now types the OPD Number manually, so even an offline
+      // (queued) create already knows the real number — no "Pending sync"
+      // placeholder. Demo mode (no backend) still auto-numbers locally.
+      opdNumber: (fields.opdNumber && String(fields.opdNumber).trim())
+        || (d.demo ? nextDemoOpdNumber() : 'Pending sync'),
       name: fields.name || '', phone: fields.phone || '',
       gender: fields.gender || '', dob: fields.dob || '', address: fields.address || '', email: fields.email || '',
       createdDate: toISODate(new Date()), updatedDate: toISODate(new Date()), status: 'Active', notes: fields.notes || '',
@@ -199,11 +296,10 @@ export function onlineSearchMatches(record, query){
 /** Demo-mode only: derive a consistent Patient Master from generated demo
  *  appointments/online records (phone, else name, as the identity key) and
  *  stamp patientId onto every record so the rest of the app never has to
- *  special-case demo mode. Real deployments get patients — and their real,
- *  externally-issued OPD Numbers — from the backend (already linked
- *  server-side; see EnzoBackend.gs's requestOpdNumberFromProvider()). The
- *  sequential "ENZO-000001" numbers below are demo-sandbox-only fixtures,
- *  not a numbering scheme this app owns. */
+ *  special-case demo mode. Real deployments get patients — with their
+ *  reception-entered OPD Numbers — from the backend (already linked
+ *  server-side). The sequential "ENZO-000001" numbers below are
+ *  demo-sandbox-only fixtures. */
 export function deriveDemoPatients(appts, onlineRecords){
   const map = new Map();
   let seq = 0;

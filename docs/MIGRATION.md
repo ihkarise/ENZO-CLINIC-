@@ -89,3 +89,19 @@ tab (`Patients`) and one new column each to `Appointments`/`OnlineRecords`,
 using the exact same append-only, backward-compatible approach described
 above, and links your existing rows to a patient automatically, once, the
 first time the app runs after upgrading. No manual step required.
+
+## Migrating to Phase 3.5 (Reception + Doctor daily workflow)
+
+**No Google Sheet change.** No columns are added, moved or renamed.
+
+Steps:
+1. Replace the website files: all of `js/` (including the new `js/morning.js`),
+   `css/app.css`, and `index.html`.
+2. Paste the updated `EnzoBackend.gs` and **re-deploy the Web App**.
+3. OPD Numbers are now **typed by reception**; the external OPD provider is
+   gone. You may delete the unused `OPD_PROVIDER_*` Script Properties.
+4. (Optional) Add a daily time-driven trigger on `sendMorningReport` and enable
+   the channels in Settings → Notifications. Set `CFG.doctor` in the script.
+
+Nothing to convert — existing patients keep their OPD Numbers; new patients get
+a reception-typed one (checked for uniqueness).
