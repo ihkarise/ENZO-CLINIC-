@@ -75,6 +75,7 @@
                 </div>
               </div>
               <button type="button" class="dupchip" id="dupChip" hidden></button>
+              <div class="field" id="opdField" hidden><label class="label" for="opd">OPD Number <span style="font-weight:400;color:var(--light)">— new patient</span></label><input type="text" id="opd" placeholder="e.g. ENZO-004521" autocomplete="off" autocapitalize="characters"/><div class="slotnote" id="opdNote" style="margin:6px 0 0"></div></div>
               <div class="field"><span class="label" id="typeLbl">Consultation type</span>
                 <div class="seg" id="seg" role="group" aria-labelledby="typeLbl">
                   <button class="seg-btn on" data-t="Offline" aria-pressed="true"><span class="ic"></span>In-clinic</button>
@@ -121,6 +122,7 @@
       <section class="page" id="pageDash" aria-label="Dashboard">
         <div class="searchbar small"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input type="search" id="dashSearch" placeholder="Find a patient by OPD, name, phone or diagnosis" aria-label="Search patients"/></div>
         <div id="dashSearchResults" hidden></div>
+        <div id="morningBrief"></div>
         <div class="dseg" id="dseg" role="group" aria-label="Time range">
           <button class="dseg-btn" data-r="week">Week</button>
           <button class="dseg-btn on" data-r="month">Month</button>
@@ -198,6 +200,10 @@
           <h2 style="font-size:.95rem;margin-bottom:2px">Notifications</h2>
           <div style="font-size:.75rem;color:var(--light);margin-bottom:14px">Daily reminder email is sent by the backend trigger (see runbook).</div>
           <label class="switchrow"><input type="checkbox" id="setEmailRem"/><span>Send the daily reminder email</span></label>
+          <div style="font-size:.75rem;color:var(--light);margin:18px 0 10px;font-weight:600">Morning report — send the daily clinic summary via:</div>
+          <label class="switchrow" style="margin-bottom:10px"><input type="checkbox" id="setMrEmail"/><span>Email</span></label>
+          <label class="switchrow" style="margin-bottom:10px"><input type="checkbox" id="setMrTelegram"/><span>Telegram</span></label>
+          <label class="switchrow"><input type="checkbox" id="setMrWhatsapp"/><span>WhatsApp</span></label>
         </div>
 
         <button class="btn-primary book" id="setSave" data-state="a"><span class="t4-swap"><span class="t4-text t4-a">Save settings</span><span class="t4-text t4-b">Saved &#10003;</span></span></button>

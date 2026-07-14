@@ -1,5 +1,7 @@
 # Operations Runbook — Enzo Homoeo Medical Centre Clinic App
 
+> **⚠️ Phase 3.5 update:** OPD Numbers are now **typed by reception in the app** and validated for uniqueness — there is **no external OPD provider**. Ignore every `setOpdProviderConfig` / `OPD_PROVIDER_URL` / "external OPD numbering system" reference below; those Script Properties are unused. Phase 3.5 also adds the Dashboard morning briefing, patient **status badges**, **priority patients**, and the **Morning Report** (`sendMorningReport`, per-channel toggles in Settings → Notifications). See [`../PHASE-3.5-REPORT.md`](../PHASE-3.5-REPORT.md).
+
 > **Who this is for:** clinic staff (Reception, Doctor, Administrator) who
 > use this app day to day, and whoever is responsible for keeping it
 > running. This is not a developer document — see
@@ -232,6 +234,11 @@ shared across every device once saved.
 - **Notifications** — turn the daily reminder email on or off. (The email
   address and any WhatsApp/Telegram channels are still configured in the
   Apps Script `CFG` block — see the deployment guide.)
+- **Morning report (Phase 3.5)** — three independent switches (Email /
+  Telegram / WhatsApp) for the daily *Morning Clinic Summary*. This is sent
+  by a time-driven trigger on `sendMorningReport` in Apps Script (add one
+  the same way as `checkFollowUps`, e.g. a Day timer at 7–8am). The report
+  the doctor sees at the top of the Dashboard is the exact same summary.
 
 Press **Save settings**. A "Settings saved" message confirms it. If you are
 signed in as Reception or Doctor there is no Settings tab — this is intended.

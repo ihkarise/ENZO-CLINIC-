@@ -12,6 +12,7 @@ import { initBooking, renderAppts, resetBookingForm, setConsultOpener, setNaviga
 import { initConsultation, openConsult, setAfterSaveHook } from './consultation.js';
 import { initOnline, renderOnline } from './online.js';
 import { initDashboard, renderDash, setToast, setTimelineOpener as setDashTimelineOpener } from './dashboard.js';
+import { initMorning, renderMorning, setTimelineOpener as setMorningTimelineOpener } from './morning.js';
 import { initTimeline, openPatientTimeline } from './timeline.js';
 import { initReminders, refreshToday, openTodayIfAny } from './reminders.js';
 import { initSettings, renderSettings, loadSettings } from './settings.js';
@@ -34,7 +35,7 @@ function navTo(target){
   const next = $(target);
   next.classList.add('active', fwd ? 'anim-fwd' : 'anim-back');
   $('hsub').textContent = SUBS[target] || '';
-  if(target === 'pageDash') renderDash();
+  if(target === 'pageDash'){ renderDash(); renderMorning(); }
   if(target === 'pageSettings') renderSettings();
 }
 
@@ -72,7 +73,7 @@ async function enterApp(){
   const badge = $('roleBadge'); if(badge) badge.hidden = false;
   resetBookingForm();
   await Promise.all([loadData(), loadSettings()]);
-  renderAppts(); renderOnline(); refreshToday(); renderDash(); renderSettings();
+  renderAppts(); renderOnline(); refreshToday(); renderDash(); renderMorning(); renderSettings();
   maybeFlushQueue();
   setTimeout(openTodayIfAny, 450);
 }
@@ -85,7 +86,7 @@ function maybeFlushQueue(){
       // Re-fetch so any patient created while offline (shown as "Pending
       // sync" / a temporary OPD number) picks up its real, server-assigned
       // Patient ID and OPD number without requiring a manual reload.
-      loadData().then(() => { renderAppts(); renderOnline(); refreshToday(); renderDash(); });
+      loadData().then(() => { renderAppts(); renderOnline(); refreshToday(); renderDash(); renderMorning(); });
     }
     if(remaining > 0 && error && error !== 'offline'){
       toast(`${remaining} offline change${remaining > 1 ? 's' : ''} could not sync (${error}) — will retry`, { duration: 6000 });
@@ -136,12 +137,13 @@ function init(){
   setToast(toast);
   setNavigator(() => navTo('pageBook'));
   setConsultOpener(openConsult);
-  setAfterSaveHook(() => { renderAppts(); renderDash(); refreshToday(); });
+  setAfterSaveHook(() => { renderAppts(); renderDash(); renderMorning(); refreshToday(); });
 
   initBooking();
   initConsultation();
   initOnline();
   initDashboard(toast);
+  initMorning();
   initTimeline();
   initReminders();
   initSettings();
@@ -155,6 +157,7 @@ function init(){
   const openTimelineFor = id => { navTo('pageTimeline'); openPatientTimeline(id); };
   setBookingTimelineOpener(openTimelineFor);
   setDashTimelineOpener(openTimelineFor);
+  setMorningTimelineOpener(openTimelineFor);
 
   initAuth(enterApp);
 }

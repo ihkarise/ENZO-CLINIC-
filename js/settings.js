@@ -36,7 +36,14 @@ export const DEFAULT_SETTINGS = {
   breaks: [{ start: '13:00', end: '16:00' }],
   maxPerDay: 40,
   capacity: { 0: 0, 1: 40, 2: 40, 3: 40, 4: 40, 5: 40, 6: 20 },
-  notifications: { emailReminders: true }
+  // emailReminders: the existing daily follow-up/appointment reminder.
+  // morningReport: Phase 3.5 — the Morning Clinic Summary, sent per channel.
+  // The administrator can enable/disable each channel independently; the
+  // backend (checkFollowUps / sendMorningReport) reads these flags.
+  notifications: {
+    emailReminders: true,
+    morningReport: { email: true, telegram: false, whatsapp: false }
+  }
 };
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -54,7 +61,9 @@ export function normalizeSettings(raw){
     breaks: Array.isArray(s.breaks) ? s.breaks.filter(b => b && b.start && b.end) : DEFAULT_SETTINGS.breaks.slice(),
     maxPerDay: (s.maxPerDay === '' || s.maxPerDay === null || s.maxPerDay === undefined) ? DEFAULT_SETTINGS.maxPerDay : Number(s.maxPerDay),
     capacity: cap,
-    notifications: Object.assign({}, DEFAULT_SETTINGS.notifications, s.notifications || {})
+    notifications: Object.assign({}, DEFAULT_SETTINGS.notifications, s.notifications || {}, {
+      morningReport: Object.assign({}, DEFAULT_SETTINGS.notifications.morningReport, (s.notifications && s.notifications.morningReport) || {})
+    })
   };
 }
 
@@ -133,7 +142,14 @@ function readForm(){
     breaks: breaksDraft.slice(),
     maxPerDay: $('setMaxDay').value,
     capacity: DAY_ORDER.reduce((acc, wd) => { acc[wd] = $('setCap' + wd).value; return acc; }, {}),
-    notifications: { emailReminders: $('setEmailRem').checked }
+    notifications: {
+      emailReminders: $('setEmailRem').checked,
+      morningReport: {
+        email: $('setMrEmail').checked,
+        telegram: $('setMrTelegram').checked,
+        whatsapp: $('setMrWhatsapp').checked
+      }
+    }
   });
 }
 
@@ -164,6 +180,10 @@ export function renderSettings(){
   breaksDraft = s.breaks.map(b => ({ start: b.start, end: b.end }));
   DAY_ORDER.forEach(wd => { const el = $('setCap' + wd); if(el) el.value = (s.capacity[wd] ?? ''); });
   $('setEmailRem').checked = !!s.notifications.emailReminders;
+  const mr = s.notifications.morningReport || {};
+  $('setMrEmail').checked = !!mr.email;
+  $('setMrTelegram').checked = !!mr.telegram;
+  $('setMrWhatsapp').checked = !!mr.whatsapp;
   document.querySelectorAll('#setTheme button').forEach(b => b.classList.toggle('on', b.dataset.theme === getTheme()));
   renderBreaks();
   renderSlotPreview();

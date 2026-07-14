@@ -63,3 +63,13 @@ export function completedBucket(appt){
   if(appt.stage === STAGE.NOSHOW) return 'noshow';
   return 'completed';
 }
+
+/** A terminal (closed) appointment — the visit actually happened or was
+ *  resolved, so it counts as this patient's "last visit" for status badges. */
+export function isTerminal(appt){
+  return appt.stage === STAGE.COMPLETED || appt.stage === STAGE.CANCELLED || appt.stage === STAGE.NOSHOW;
+}
+
+/** Midnight today, reused by the morning briefing and overdue calculations
+ *  so every module agrees on where "today" begins. */
+export function startOfToday(){ const d = new Date(); d.setHours(0,0,0,0); return d; }

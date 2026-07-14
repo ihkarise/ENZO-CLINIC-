@@ -309,3 +309,38 @@ input[type=time]:focus{border-color:var(--teal);background:#fff;}
 :root[data-theme="dark"] .pcard,
 :root[data-theme="dark"] .pcard-opd{background:var(--white);}
 :root[data-theme="dark"] .pcard-opd{background:var(--teal-soft);}
+
+/* ===== Phase 3.5 — patient status badges ===== */
+.tb.new{background:#e7f6ee;color:var(--green);} .tb.new .d{background:var(--green);}
+.tb.return{background:var(--teal-soft);color:var(--teal);} .tb.return .d{background:var(--teal);}
+.tb.overdue{background:#efeafc;color:#7a5af0;} .tb.overdue .d{background:#7a5af0;}
+:root[data-theme="dark"] .tb.new{background:#12331f;}
+:root[data-theme="dark"] .tb.return{background:var(--teal-soft);}
+:root[data-theme="dark"] .tb.overdue{background:#241d3a;color:#a892f5;}
+
+/* ===== Phase 3.5 — Morning briefing (Dashboard) ===== */
+.brief{margin-bottom:18px;}
+.brief-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 4px 12px;}
+.brief-h h2{font-size:1.05rem;} .brief-h .sub{font-size:.76rem;color:var(--light);}
+.brief-sum{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px;}
+@media (min-width:560px){.brief-sum{grid-template-columns:repeat(4,1fr);}}
+.sumcard{background:#fff;border-radius:var(--r-sm);padding:13px 14px;box-shadow:var(--shadow);cursor:pointer;border:1.5px solid transparent;text-align:left;font:inherit;transition:border-color .2s,transform .2s var(--t8-ease);}
+.sumcard:hover{transform:translateY(-1px);border-color:var(--teal);}
+.sumcard.on{border-color:var(--blue);}
+.sumcard .sv{font-family:"Poppins";font-weight:700;font-size:1.5rem;color:var(--blue);line-height:1.05;}
+.sumcard .sl{font-size:.7rem;font-weight:600;letter-spacing:.02em;color:var(--light);margin-top:3px;display:flex;align-items:center;gap:5px;}
+.sumcard .sl .d{width:8px;height:8px;border-radius:50%;flex:none;}
+.sumcard .d.c-new{background:var(--green);} .sumcard .d.c-return{background:var(--teal);}
+.sumcard .d.c-done{background:var(--green);} .sumcard .d.c-cancel{background:var(--coral);}
+.sumcard .d.c-noshow{background:#b6791a;} .sumcard .d.c-overdue{background:#7a5af0;} .sumcard .d.c-appt{background:var(--blue);}
+:root[data-theme="dark"] .sumcard{background:var(--white);}
+.brief-list{margin-bottom:8px;}
+.trow{display:flex;align-items:center;gap:12px;background:#fff;border-radius:var(--r-sm);padding:11px 14px;margin-bottom:8px;box-shadow:var(--shadow);animation:rise .35s var(--t8-ease) both;}
+:root[data-theme="dark"] .trow{background:var(--white);}
+.trow .tt{flex:none;width:64px;font-family:"Poppins";font-weight:600;font-size:.82rem;color:var(--teal);}
+.trow .topd{flex:none;font-family:"Poppins";font-weight:700;font-size:.68rem;color:var(--blue);background:var(--teal-soft);border-radius:999px;padding:3px 8px;}
+.trow .tnm{flex:1;min-width:0;font-weight:600;font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.trow .tbadges{flex:none;display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;}
+.trow .prio{font-size:.7rem;color:#b6791a;letter-spacing:1px;flex:none;}
+.morningreport{white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.78rem;line-height:1.5;color:var(--ink);background:var(--grey);border-radius:var(--r-sm);padding:14px;max-height:420px;overflow:auto;}
+.reportbar{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}

@@ -78,3 +78,11 @@ the Phase 3 frontend, is **not recommended**: the frontend calls
 backend, so booking's duplicate detection and the Timeline will fail.
 Either roll both back together, or keep the backend on Phase 3 and only
 roll back the frontend.
+
+## Rolling back Phase 3.5
+
+Front end: restore the previous `js/`, `css/app.css`, `index.html` (remove
+`js/morning.js`). Back end: restore the previous `EnzoBackend.gs` and re-deploy.
+**No data conversion** is needed either way — Phase 3.5 changed no Sheet
+columns. If you roll the backend back to a build that used the external OPD
+provider, re-add the `OPD_PROVIDER_*` Script Properties.

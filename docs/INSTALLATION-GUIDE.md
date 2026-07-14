@@ -1,4 +1,23 @@
-# Installation Guide — Phase 2 & Phase 3
+# Installation Guide — Phase 2, Phase 3 & Phase 3.5
+
+> ### ⚠️ Phase 3.5 changes two things in this guide
+> 1. **No external OPD provider any more.** Reception now **types the OPD
+>    Number** when registering a new patient, and the app checks it is
+>    unique. **Skip every step below about `setOpdProviderConfig` /
+>    `OPD_PROVIDER_URL`** — it is no longer used. Nothing else about the
+>    Patients tab changes.
+> 2. **New in the app:** a Dashboard **morning briefing** (today's
+>    appointments + status badges + clickable counts), a **Morning Report**
+>    you can send by Email/Telegram/WhatsApp (toggles in
+>    Settings → Notifications), and **priority patients**.
+>
+> **To install Phase 3.5:** replace the website files (all of `js/`, `css/`,
+> `index.html`), paste the updated `EnzoBackend.gs`, and **re-deploy the Web
+> App**. **No Google Sheet columns change.** Optionally add a time-driven
+> trigger on `sendMorningReport` for the daily report. Full details:
+> [`../PHASE-3.5-REPORT.md`](../PHASE-3.5-REPORT.md).
+
+---
 
 > **Who this is for:** you, even if you have **never written code** and don't
 > know what most of these words mean. Read slowly. Do one step at a time.

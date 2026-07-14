@@ -1,5 +1,7 @@
 # Deployment Guide — Enzo Homoeo Medical Centre Clinic App
 
+> **⚠️ Phase 3.5 update:** OPD Numbers are now **typed by reception in the app** and validated for uniqueness — there is **no external OPD provider**. Ignore every `setOpdProviderConfig` / `OPD_PROVIDER_URL` / "external OPD numbering system" reference below; those Script Properties are unused. Phase 3.5 also adds the Dashboard morning briefing, patient **status badges**, **priority patients**, and the **Morning Report** (`sendMorningReport`, per-channel toggles in Settings → Notifications). See [`../PHASE-3.5-REPORT.md`](../PHASE-3.5-REPORT.md).
+
 > **Who this is for:** someone deploying this app for the first time, with
 > little or no prior deployment experience. Every click is spelled out.
 > Follow the sections **in order**. Don't skip verification steps — most
