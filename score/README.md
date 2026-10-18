@@ -31,14 +31,20 @@ no backend calls.
 score/
   index.html            page shell (header, main, footer), metadata
   css/gut-score.css     all styles, scoped to .gut-score-app (incl. print)
-  js/config.js          single source of truth: questions, options, sub-scores,
-                        bands, warning signs, copy, SITE settings
-  js/scoring.js         pure scoring engine (no DOM/network/storage)
+  js/config.js          structure (questions, points, sub-scores, bands, warning
+                        signs) + SITE settings (WhatsApp number, photos…)
+  js/i18n.js            all visible text, English (en) + Malayalam (ml), same keys
+  js/scoring.js         pure scoring engine (no DOM/network/storage, no wording)
+  js/message.js         pure WhatsApp message builder + wa.me link
   js/app.js             UI controller: screens, navigation, focus, rendering
   js/art.js             decorative inline SVG icons + illustration
-  assets/               logo-horizontal.png, logo-mark.png (copied from /assets)
-  tests/scoring.test.mjs  26 unit tests (node:test)
-  tests/ui.test.cjs       17 browser tests (Playwright)
+  assets/               logo-horizontal.png, logo-mark.png (copied from /assets),
+                        share.jpg (1200×630 link preview),
+                        photos/hero.jpg + photos/doctor.jpg (1×1 placeholders,
+                        hidden until replaced by a real photo ≥100px wide)
+  tests/scoring.test.mjs  33 unit tests (node:test)
+  tests/ui.test.cjs       22 browser tests (Playwright)
+  SETUP-GUIDE.md        plain-English setup, settings, photos, custom domain
 sw.js                   +1 line: never intercept /score/
 ```
 
@@ -46,15 +52,26 @@ sw.js                   +1 line: never intercept /score/
 
 | Key | Default | Notes |
 |---|---|---|
-| `bookingUrl` | `''` | **No verified public booking route exists** (clinic booking is staff-only). While blank, the CTA reads "To book a consultation, please contact ENZO Homoeo Medical Centre directly." Set it to a verified URL (e.g. an approved booking page) to show a **Book a Consultation** button. |
+| `whatsappNumber` | `'919986319779'` | Clinic WhatsApp Business number (digits, country code first). Blank hides the WhatsApp card. |
+| `bookingUrl` | `''` | Optional booking page. While blank, **Book a Consultation** opens WhatsApp with a booking message. |
+| `photos.hero` / `photos.doctor` | `assets/photos/*.jpg` | Optional photo slots (1000×1000 and 600×600). |
 | `privacyUrl` | `''` | Footer link hidden until an approved policy URL exists. |
 | `emergencyNumber` | `'112'` | India's national emergency number (ERSS). Confirm for the clinic's region before go-live. |
 
-No clinic phone number, address or credentials are included, by design.
+The only clinic contact included is the WhatsApp number supplied by the clinic.
 
 ## 4. Behaviour
 
-- **Journey:** intro → Q1…Q8 (one per screen) → warning-sign check → results.
+- **Journey:** language choice (English / Malayalam) → intro → Q1…Q8 (one per
+  screen) → warning-sign check → results. A header switch changes language at any
+  step without losing answers; `<html lang>` and fonts (Noto Sans Malayalam) follow.
+- **WhatsApp lead:** results open with a "How did you score? Contact your doctor"
+  card; one tap opens `wa.me/<SITE.whatsappNumber>` with a pre-typed message (score,
+  band, top areas, all six area scores, ticked warning signs, "Can we do something
+  about this? Please tell me more.") in the chosen language. "Book a Consultation"
+  uses the same number with a booking message unless `SITE.bookingUrl` is set. When
+  warning signs are ticked the safety panel stays **above** the WhatsApp card, and
+  the card repeats "call 112 first" for urgent signs.
 - **Scoring:** `total = Q1+…+Q8` (0–24), validated as exactly eight integers 0–3.
   Bands: 0–4 Low · 5–9 Mild · 10–16 Moderate · 17–24 High (tested for complete,
   non-overlapping coverage).
@@ -83,8 +100,12 @@ No clinic phone number, address or credentials are included, by design.
 ## 5. Privacy and security
 
 - Answers are kept **only in memory**. No localStorage, sessionStorage,
-  cookies or IndexedDB. Nothing goes in the URL, the console or the network
-  (the tests check this). A refresh resets progress (a `beforeunload` prompt
+  cookies or IndexedDB. Nothing goes in the page URL, the console or the network
+  (the tests check this). The only exit is visitor-initiated: tapping the WhatsApp
+  button opens a `wa.me` link whose `text` parameter carries the summary; nothing is
+  sent until the visitor presses Send in WhatsApp, and they can edit it first. The
+  clinic's WhatsApp Business account then holds that health information, so access
+  to that phone/account should be restricted. A refresh resets progress (a `beforeunload` prompt
   warns mid-assessment). There is deliberately no draft persistence.
 - No analytics, no third-party scripts. The only third-party request is the
   Google Fonts stylesheet and font files, which carry no health data. Remove
@@ -96,9 +117,9 @@ No clinic phone number, address or credentials are included, by design.
 ## 6. Tests
 
 ```
-node --test score/tests/*.test.mjs                       # 26 scoring tests
+node --test score/tests/*.test.mjs                       # 33 unit tests
 python3 -m http.server 8765 &                            # from repo root
-NODE_PATH="$(npm root -g)" node --test score/tests/ui.test.cjs   # 17 UI tests
+NODE_PATH="$(npm root -g)" node --test score/tests/ui.test.cjs   # 22 UI tests
 ```
 
 The UI tests cover: intro and disclaimer, one question per screen, the
@@ -180,8 +201,10 @@ manual redeploy. Before enabling it:
 
 ## 9. Known limitations
 
-- No save, share or patient-link feature (no safe public endpoint exists).
-- No public booking route. The CTA shows a "contact the clinic" message until `bookingUrl` is set.
+- No server-side save or patient linking (no safe public endpoint exists); leads
+  arrive as WhatsApp chats and are not written to the Google Sheet.
+- `og:image`/`og:url` are absolute URLs on `ihkarise.github.io`; update them when
+  moving to the custom domain (SETUP-GUIDE Stage 2 step 7).
 - Progress resets on refresh (intentional, for privacy).
 - Uses CSS `:has()` for selected-card styling (Chrome/Edge 105+, Safari 15.4+, Firefox 121+).
   On older browsers the native radios/checkboxes still work, but the selected highlight is not shown.
@@ -194,6 +217,10 @@ manual redeploy. Before enabling it:
 | Item | Status |
 |---|---|
 | Exact 8 questions, options and points from config | ✅ verified (unit + UI tests) |
+| English + Malayalam: same keys, supplied Malayalam wording, full journey, mid-flow switch | ✅ verified (unit + UI tests, screenshots) |
+| WhatsApp card first (after safety panel), correct number, message in chosen language | ✅ verified (UI tests); actual delivery to WhatsApp not tested from here |
+| Photo slots hidden as placeholders, shown when replaced | ✅ verified (UI test with a substituted 600×600 image) |
+| Malayalam wording reviewed by a native speaker / clinician | ⏳ needs clinic sign-off |
 | Scoring 0–24, validation, bands, sub-scores, ties | ✅ verified (26 unit tests) |
 | Warning check independent of score, none-exclusive, urgent routing | ✅ verified (unit + UI) |
 | One question per screen, progress, validation, back navigation, keyboard | ✅ verified (UI tests) |
@@ -202,6 +229,6 @@ manual redeploy. Before enabling it:
 | Staff app loads; its SW still registers and no longer caches `/score/` | ✅ verified in headless Chromium (demo login screen only) |
 | Staff login, roles, booking, Patient Master, consultation, timeline, printing, offline queue against the live backend | ⏳ **not run.** No staff code changed, but needs the manual `docs/TESTING.md` pass before merge |
 | Screen-reader pass (NVDA/VoiceOver) | ⏳ planned (semantics are in place, but no assistive-technology run yet) |
-| Booking URL, privacy URL, emergency number sign-off | ⏳ needs clinic decision |
+| Privacy URL, emergency number sign-off | ⏳ needs clinic decision |
 | Subdomain DNS + HTTPS | ⏳ planned (needs the real domain) |
 | Persistence / patient linking | ⏳ planned (§8) |

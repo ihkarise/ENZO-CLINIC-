@@ -170,6 +170,60 @@
 .gs-footer-links{display:flex;flex-wrap:wrap;gap:16px;font-size:.92rem;}
 .gs-footer-links:empty{display:none;}
 
+/* ---------- Malayalam ---------- */
+html:lang(ml) .gut-score-app,html:lang(ml) .gut-score-app :is(h1,h2,h3,h4,.gs-btn,.gs-qtext){font-family:"Noto Sans Malayalam","Inter",system-ui,sans-serif;}
+html:lang(ml) .gut-score-app{line-height:1.75;}
+html:lang(ml) .gs-h1{font-size:clamp(1.8rem,6vw,2.8rem);line-height:1.3;}
+html:lang(ml) .gs-eyebrow,html:lang(ml) .gs-band-range{text-transform:none;letter-spacing:0;}
+[lang="ml"]{font-family:"Noto Sans Malayalam","Inter",system-ui,sans-serif;}
+
+/* ---------- header language switch ---------- */
+.gs-lang{display:inline-flex;flex:none;margin-left:12px;padding:3px;border:1px solid var(--gs-line);border-radius:999px;background:var(--gs-paper);}
+.gs-lang[hidden]{display:none;}
+.gs-lang button{min-height:38px;padding:0 12px;border:0;border-radius:999px;background:transparent;color:var(--gs-ink);font:600 .85rem "Inter","Noto Sans Malayalam",sans-serif;cursor:pointer;}
+.gs-lang button[lang="ml"]{font-family:"Noto Sans Malayalam",sans-serif;}
+.gs-lang button[aria-pressed="true"]{background:var(--gs-ink);color:#fff;}
+
+/* ---------- language choice screen ---------- */
+.gs-langpick{max-width:520px;margin:0 auto;text-align:center;padding:8px 0 24px;}
+.gs-langpick-art{width:180px;margin:0 auto 12px;}
+.gs-langpick .gs-h2 span{display:block;}
+.gs-langpick-ml{margin-top:4px;}
+.gs-langpick-btns{display:grid;gap:12px;margin-top:24px;}
+.gs-langbtn{display:grid;grid-template-columns:1fr auto;align-items:center;gap:2px 12px;width:100%;min-height:76px;padding:14px 22px;text-align:left;border:1.5px solid var(--gs-line);border-radius:var(--gs-r);background:var(--gs-paper);color:var(--gs-ink);cursor:pointer;box-shadow:var(--gs-shadow);transition:border-color .2s,background-color .2s;}
+.gs-langbtn:hover{border-color:var(--gs-teal);background:var(--gs-sage);}
+.gs-langbtn-name{font:700 1.35rem/1.3 "Poppins","Noto Sans Malayalam",sans-serif;}
+.gs-langbtn[lang="ml"] .gs-langbtn-name,.gs-langbtn[lang="ml"] .gs-langbtn-sub{font-family:"Noto Sans Malayalam",sans-serif;}
+.gs-langbtn-sub{grid-column:1;font-size:.92rem;color:var(--gs-muted);}
+.gs-langbtn .gs-icon{grid-column:2;grid-row:1/span 2;width:24px;height:24px;}
+
+/* ---------- optional photos ---------- */
+.gs-hero-photo img{display:block;width:100%;height:auto;aspect-ratio:1;object-fit:cover;border-radius:44% 56% 52% 48% / 48% 46% 54% 52%;}
+.gs-hero-art.has-photo .gs-illus{display:none;}
+.gs-wa-photo{flex:none;}
+.gs-wa-photo img{display:block;width:96px;height:96px;border-radius:50%;object-fit:cover;border:3px solid #fff;box-shadow:var(--gs-shadow);}
+
+/* ---------- WhatsApp lead card ---------- */
+.gs-wa{display:flex;flex-wrap:wrap;gap:16px 22px;align-items:flex-start;padding:24px 20px;border-radius:var(--gs-r);background:var(--gs-sage);border:1.5px solid var(--gs-sage-d);}
+.gs-wa-body{flex:1;min-width:240px;}
+.gs-wa .gs-h2{margin-bottom:8px;}
+.gs-wa-score{font-size:1.1rem;color:var(--gs-ink);margin-bottom:8px;}
+.gs-wa-score strong{font-family:"Poppins",sans-serif;font-size:1.35rem;}
+.gs-btn-wa{width:100%;max-width:420px;margin:14px 0 8px;background:#1B7F4C;color:#fff!important;min-height:58px;font-size:1.05rem;}
+.gs-btn-wa:hover{background:#146A3E;transform:translateY(-1px);}
+.gs-btn-wa .gs-icon{width:24px;height:24px;}
+.gs-wa-urgent{display:flex;gap:8px;align-items:flex-start;margin-top:10px;font-weight:600;color:var(--gs-red);}
+@media (max-width:640px){ .gs-product{display:none;} .gs-lang{margin-left:auto;} }
+@media (max-width:420px){
+  .gs-header-in{gap:8px;padding:8px 12px;}
+  .gs-back{padding:0 10px;min-width:44px;justify-content:center;}
+  .gs-back span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}
+  .gs-lang{margin-left:auto;}
+  .gs-lang button{padding:0 9px;font-size:.8rem;min-height:36px;}
+}
+@media (min-width:768px){ .gs-wa{padding:28px 32px;} }
+@media print{ .gs-lang,.gs-btn-wa{display:none!important;} .gs-wa{background:#fff;border:1px solid #999;} }
+
 /* ---------- responsive ---------- */
 @media (max-width:420px){
   .gs-product{font-size:.7rem;letter-spacing:.04em;}
