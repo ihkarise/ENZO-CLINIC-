@@ -54,6 +54,7 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
   if (new URL(req.url).origin !== self.location.origin && req.mode !== 'navigate') return; // never intercept the Apps Script API
+  if (new URL(req.url).pathname.includes('/score/')) return; // public Gut Health Score app: not part of the staff shell
 
   if (req.mode === 'navigate') {
     e.respondWith(
