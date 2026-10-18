@@ -221,7 +221,7 @@ test('explanation for all-zero answers', () => {
 test('WhatsApp message contains score, band, areas, warnings and the question (English)', () => {
   const r = scoreAssessment([1, 1, 2, 3, 0, 0, 2, 3], [NONE_ID]);
   const m = buildMessage(r, EN);
-  assert.match(m, /^Hello Doctor,\nI just completed the ENZO Gut Health Score™\./);
+  assert.match(m, /^Hello Dr\. Ajay,\nI just completed the ENZO Gut Health Score™\./);
   assert.match(m, /\*My score: 12\/24 – Moderate reported symptoms\*/);
   assert.match(m, /Highest areas: Abdominal pain 3\/3, Daily-life impact 3\/3/);
   assert.match(m, /Area scores: Bloating and gas 2\/6 · Acidity and reflux 2\/3 · Abdominal pain 3\/3 · Bowel function 0\/6 · Food-related symptoms 2\/3 · Daily-life impact 3\/3/);
@@ -232,7 +232,7 @@ test('WhatsApp message contains score, band, areas, warnings and the question (E
 test('WhatsApp message lists ticked warning signs and booking ask (Malayalam)', () => {
   const r = scoreAssessment(zeros, ['chest', 'jaundice']);
   const m = buildMessage(r, ML, 'book');
-  assert.match(m, /നമസ്കാരം ഡോക്ടർ/);
+  assert.match(m, /^നമസ്കാരം ഡോ\. അജയ്,/);
   assert.match(m, /\*എന്റെ സ്കോർ: 0\/24 – കുറഞ്ഞ ലക്ഷണഭാരം\*/);
   assert.match(m, /ഏറ്റവും ഉയർന്ന വിഭാഗങ്ങൾ: ഒന്നുമില്ല/);
   assert.match(m, /കണ്ണുകളിലോ ചർമ്മത്തിലോ മഞ്ഞനിറം, നെഞ്ചുവേദന/);

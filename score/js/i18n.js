@@ -128,12 +128,12 @@ export const TEXT = {
     /* WhatsApp lead card */
     waEyebrow: 'How did you score?',
     waH: 'Contact your doctor and know your score',
-    waBody: 'Send your result to the doctor on WhatsApp with one tap, and ask what can be done about it.',
+    waBody: 'Send your result to Dr. Ajay on WhatsApp with one tap, and ask what can be done about it.',
     waBtn: 'Send my score on WhatsApp',
     waNote: 'Opens WhatsApp with your score already typed. You can read or change the message before sending. Replies are not instant.',
     waUrgent: n => `If you have an urgent warning sign, call ${n} first. Do not wait for a WhatsApp reply.`,
     msg: {
-      hello: 'Hello Doctor,',
+      hello: 'Hello Dr. Ajay,',
       done: 'I just completed the ENZO Gut Health Score™.',
       score: (t, m, band) => `*My score: ${t}/${m} – ${band}*`,
       top: 'Highest areas',
@@ -284,12 +284,12 @@ export const TEXT = {
 
     waEyebrow: 'നിങ്ങളുടെ സ്കോർ എത്ര?',
     waH: 'ഡോക്ടറുമായി ബന്ധപ്പെട്ട് നിങ്ങളുടെ സ്കോർ മനസ്സിലാക്കൂ',
-    waBody: 'ഒറ്റ ടാപ്പിൽ നിങ്ങളുടെ ഫലം WhatsApp വഴി ഡോക്ടർക്ക് അയച്ച്, ഇതിനെക്കുറിച്ച് എന്തുചെയ്യാനാകുമെന്ന് ചോദിക്കൂ.',
+    waBody: 'ഒറ്റ ടാപ്പിൽ നിങ്ങളുടെ ഫലം WhatsApp വഴി ഡോ. അജയിന് അയച്ച്, ഇതിനെക്കുറിച്ച് എന്തുചെയ്യാനാകുമെന്ന് ചോദിക്കൂ.',
     waBtn: 'എന്റെ സ്കോർ WhatsApp-ൽ അയയ്ക്കുക',
     waNote: 'നിങ്ങളുടെ സ്കോർ ടൈപ്പ് ചെയ്ത നിലയിൽ WhatsApp തുറക്കും. അയയ്ക്കുന്നതിന് മുമ്പ് സന്ദേശം വായിക്കാനും മാറ്റാനും കഴിയും. മറുപടി ഉടൻ ലഭിക്കണമെന്നില്ല.',
     waUrgent: n => `അടിയന്തര മുന്നറിയിപ്പ് ലക്ഷണങ്ങൾ ഉണ്ടെങ്കിൽ ആദ്യം ${n}-ൽ വിളിക്കുക. WhatsApp മറുപടിക്ക് കാത്തിരിക്കരുത്.`,
     msg: {
-      hello: 'നമസ്കാരം ഡോക്ടർ,',
+      hello: 'നമസ്കാരം ഡോ. അജയ്,',
       done: 'ഞാൻ ENZO Gut Health Score™ പൂർത്തിയാക്കി.',
       score: (t, m, band) => `*എന്റെ സ്കോർ: ${t}/${m} – ${band}*`,
       top: 'ഏറ്റവും ഉയർന്ന വിഭാഗങ്ങൾ',

@@ -57,7 +57,7 @@ exactly how it was.
    WhatsApp to **+91 99863 19779** with a message already typed, e.g.:
 
    ```
-   Hello Doctor,
+   Hello Dr. Ajay,
    I just completed the ENZO Gut Health Score™.
 
    *My score: 12/24 – Moderate reported symptoms*
@@ -73,6 +73,8 @@ exactly how it was.
    consultation."
 5. If a patient ticks a danger sign (e.g. chest pain), the **emergency message (call
    112) is shown above the WhatsApp button**, on purpose.
+
+**To change the doctor's name** (in the message and on the card), edit `hello:` and `waBody:` in **score → js → i18n.js**, in both the English and Malayalam parts.
 
 **Tip for WhatsApp Business:** set up a *Quick Reply* or *Label* (e.g. "Gut Score lead")
 so reception can tag these chats quickly.
@@ -207,8 +209,8 @@ never affected.
 - **Patients don't log in, and nothing is saved on the website.** Answers stay on the
   patient's phone. The clinic only receives a result when the patient taps the
   WhatsApp button **and** presses Send. They can read or change the message first.
-- WhatsApp messages contain health information. Keep the clinic phone locked and only
-  let authorised staff use the WhatsApp Business account.
+- WhatsApp messages contain health information. **Only authorised clinic staff** may use
+  the WhatsApp Business account; keep the phone locked with a PIN.
 - **Saving results to the clinic's Google Sheet isn't switched on.** That needs a
   developer to add a new, secured part to the Apps Script. See `README.md` §8.
 - **If a patient ticks a warning sign** (e.g. blood in stool, chest pain), the result
