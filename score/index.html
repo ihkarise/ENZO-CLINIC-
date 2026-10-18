@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#F7F5EF" />
+<title>ENZO Gut Health Score™ · ENZO Homoeo Medical Centre</title>
+<meta name="description" content="An 8-question educational digestive symptom assessment from ENZO Homoeo Medical Centre. Takes about 2 minutes. Not a diagnosis." />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="ENZO Gut Health Score™" />
+<meta property="og:description" content="How healthy is your gut? Discover your digestive symptom pattern in about 2 minutes. Educational assessment, not a diagnosis." />
+<meta property="og:image" content="assets/logo-horizontal.png" />
+<meta name="robots" content="index,follow" />
+<!-- Add <link rel="canonical" href="https://<final-hostname>/"> once the real
+     subdomain is registered and verified. See score/README.md §Deployment. -->
+<link rel="icon" type="image/png" href="assets/logo-mark.png" />
+<link rel="apple-touch-icon" href="assets/logo-mark.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="css/gut-score.css" />
+</head>
+<body class="gut-score-app">
+<a class="gs-skip" href="#gs-main">Skip to content</a>
+<header class="gs-header">
+  <div class="gs-header-in">
+    <button type="button" class="gs-back" id="gsBack" hidden>
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M15 18l-6-6 6-6" /></svg>
+      <span>Back</span>
+    </button>
+    <a class="gs-brand" href="./" aria-label="ENZO Gut Health Score™ home">
+      <img src="assets/logo-horizontal.png" alt="ENZO Homoeo Medical Centre" width="139" height="45" />
+    </a>
+    <span class="gs-product">ENZO Gut Health Score™</span>
+  </div>
+</header>
+
+<main id="gs-main" class="gs-main" tabindex="-1">
+  <div id="gsScreen">
+    <noscript>
+      <div class="gs-card">
+        <h1 class="gs-h1">ENZO Gut Health Score™</h1>
+        <p>This assessment needs JavaScript to calculate your score. Please enable JavaScript or use a different browser.</p>
+      </div>
+    </noscript>
+  </div>
+</main>
+
+<div class="gs-sr" id="gsLive" aria-live="polite" aria-atomic="true"></div>
+
+<footer class="gs-footer">
+  <div class="gs-footer-in">
+    <p class="gs-footer-name" id="gsClinicName">ENZO Homoeo Medical Centre</p>
+    <p class="gs-footer-note">Educational symptom assessment. It cannot diagnose or rule out any medical condition. In an emergency, contact emergency services.</p>
+    <nav class="gs-footer-links" id="gsFooterLinks" aria-label="Footer"></nav>
+  </div>
+</footer>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
