@@ -45,7 +45,6 @@ export function calculateSubscores(answers){
   ASSESSMENT.questions.forEach((q, i) => { byId[q.id] = answers[i]; });
   return SUBSCORES.map(s => ({
     id: s.id,
-    label: s.label,
     max: s.max,
     score: s.questions.reduce((sum, qid) => sum + byId[qid], 0)
   }));
@@ -110,33 +109,32 @@ export function scoreAssessment(answers, warningSelection){
 }
 
 /**
- * Personalised explanation built only from approved sentence templates and
- * the visitor's own answers. It restates what was reported; it never
- * suggests a cause, diagnosis or treatment.
+ * Personalised explanation built only from approved sentence templates
+ * (T = TEXT[lang] from i18n.js) and the visitor's own answers. It restates
+ * what was reported; it never suggests a cause, diagnosis or treatment.
  */
-export function buildExplanation(answers, result){
+export function buildExplanation(answers, result, T){
   validateAnswers(answers);
+  if(!result.highest.length) return [T.expNone];
   const lines = [];
-  if(!result.highest.length){
-    lines.push('You reported none of the eight listed digestive symptoms during the past 14 days.');
-    return lines;
-  }
   const qById = {};
   ASSESSMENT.questions.forEach((q, i) => { qById[q.id] = { q, v: answers[i] }; });
+  const optionText = (q, v) => T.options[q.optionSet][v];
   result.highest.forEach(cat => {
     const def = SUBSCORES.find(s => s.id === cat.id);
     const parts = def.questions
       .map(qid => qById[qid])
       .filter(x => x.v > 0)
       .map(x => {
-        const opt = x.q.options[x.v];
-        return x.q.title.toLowerCase() + ' — ' + opt.label.toLowerCase() + (opt.detail ? ' (' + opt.detail + ')' : '');
+        const opt = optionText(x.q, x.v);
+        return T.expPart(T.questions[x.q.id].title, opt.label, opt.detail);
       });
-    lines.push(cat.label + ' scored ' + cat.score + ' out of ' + cat.max + '. You reported: ' + parts.join('; ') + '.');
+    lines.push(T.expLine(T.subscores[cat.id], cat.score, cat.max, parts.join('; ')));
   });
-  const impact = answers[ASSESSMENT.questions.findIndex(q => q.id === 'q8')];
+  const q8 = ASSESSMENT.questions.findIndex(q => q.id === 'q8');
+  const impact = answers[q8];
   if(impact >= 2 && !result.highest.some(c => c.id === 'impact')){
-    lines.push('You also reported that digestive symptoms interfered with your daily life ' + ASSESSMENT.questions[7].options[impact].label.toLowerCase() + '.');
+    lines.push(T.expImpact(optionText(ASSESSMENT.questions[q8], impact).label));
   }
   return lines;
 }

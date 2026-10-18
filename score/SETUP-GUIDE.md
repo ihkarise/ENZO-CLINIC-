@@ -8,7 +8,7 @@ There are two stages. Do Stage 1 first. Stage 2 is optional.
 
 | Stage | Result | Time |
 |---|---|---|
-| 1. Turn it on | Live at `https://ihkarise.github.io/ENZO-CLINIC-/score/` | 10 minutes |
+| 1. Turn it on | Live at `https://ihkarise.github.io/ENZO-CLINIC-/score/` (English + Malayalam, WhatsApp leads) | 10 minutes |
 | 2. Own address (optional) | Live at e.g. `https://score.yourclinic.com` | 30 minutes + waiting for the domain |
 
 ---
@@ -47,27 +47,91 @@ exactly how it was.
 
 ---
 
-## Changing the settings (booking link, privacy page, emergency number)
+## What patients see
 
-All the settings are in one file. Edit it on the GitHub website:
+1. **Choose language**: two big buttons, **English** or **മലയാളം**. They can switch
+   at any time with the button at the top right; their answers are kept.
+2. Intro → 8 questions (one per screen) → safety check → result.
+3. At the top of the result: **"How did you score? Contact your doctor and know your
+   score"** with a big green **Send my score on WhatsApp** button. One tap opens
+   WhatsApp to **+91 99863 19779** with a message already typed, e.g.:
 
-1. In the repository, open the folders **score** → **js** → click **config.js**.
-2. Click the **pencil icon** (✏️ "Edit this file"), top right of the file.
-3. Near the top you'll see a block called `SITE`. Only change the text **between the
-   quote marks `' '`**. Don't delete the quotes, commas or anything else.
+   ```
+   Hello Doctor,
+   I just completed the ENZO Gut Health Score™.
 
-   | Line | What to put between the quotes | Example |
-   |---|---|---|
-   | `bookingUrl: ''` | The web page where patients book, or the clinic's WhatsApp link. While it's empty, patients see "please contact the clinic directly". | `bookingUrl: 'https://wa.me/91XXXXXXXXXX'` (use the clinic's real number, country code first, no `+` or spaces) |
-   | `privacyUrl: ''` | Link to your privacy policy page, if you have one. Leave empty to hide it. | `privacyUrl: 'https://yourclinic.com/privacy'` |
-   | `emergencyNumber: '112'` | Emergency number for your area. 112 is India's national number. | leave as `'112'` |
+   *My score: 12/24 – Moderate reported symptoms*
+   Highest areas: Abdominal pain 3/3, Daily-life impact 3/3
+   Area scores: Bloating and gas 2/6 · Acidity and reflux 2/3 · ...
+   Warning signs: none of the listed signs
 
-4. Click the green **Commit changes…** button, then **Commit changes** again.
-5. Wait 2–5 minutes, then refresh the score page. On your phone you may need to close and reopen the tab.
+   Can we do something about this? Please tell me more.
+   ```
+   (In Malayalam if they chose Malayalam.) The patient just presses **Send**. Every
+   message that arrives on the clinic's WhatsApp Business is a lead with their score.
+4. **Book a Consultation** lower down also opens WhatsApp, with "I would like to book a
+   consultation."
+5. If a patient ticks a danger sign (e.g. chest pain), the **emergency message (call
+   112) is shown above the WhatsApp button**, on purpose.
 
-**Question wording, score ranges and the disclaimer** are in the same file
-further down. They were written to your exact specification, so only change
-them if the clinic decides to. Change only the text between quotes, the same way.
+**Tip for WhatsApp Business:** set up a *Quick Reply* or *Label* (e.g. "Gut Score lead")
+so reception can tag these chats quickly.
+
+---
+
+## Changing the settings
+
+All the settings are in one file: **score → js → config.js**. To edit it:
+
+1. Open the file on GitHub and click the **pencil icon** (✏️).
+2. Change only the text **between the quote marks `' '`**.
+3. Click **Commit changes…** → **Commit changes**. Wait 2–5 minutes and refresh.
+
+| Line | What it does | Now set to |
+|---|---|---|
+| `whatsappNumber: '919986319779'` | The WhatsApp number that gets the leads. Country code first, digits only. | 919986319779 |
+| `bookingUrl: ''` | Only if you get a separate booking website. Empty = the booking button uses WhatsApp. | empty |
+| `privacyUrl: ''` | Link to a privacy policy page. Empty = hidden. | empty |
+| `emergencyNumber: '112'` | Emergency number shown with danger signs. | 112 |
+
+## Changing the wording (English or Malayalam)
+
+All the words are in **score → js → i18n.js**: first the English part (`en:`), then
+the Malayalam part (`ml:`). Edit it exactly like `config.js`: change only text
+between quotes. Be careful not to remove a quote mark `'`, a comma `,` or a `${…}`
+part (those insert the score or number automatically).
+
+After editing, open the page and go through it once in **both** languages.
+
+---
+
+## Adding photos (optional)
+
+There are 3 picture slots in the folder **score → assets**. Two of them are empty
+placeholders that stay hidden until you replace them, so the site looks finished
+without them.
+
+| File | Where it shows | Size to make it | Notes |
+|---|---|---|---|
+| `assets/photos/doctor.jpg` | Round photo on the green "Contact your doctor" WhatsApp card | **600 × 600 px**, square, JPG, under 150 KB | Face in the centre, plain background. Shown as a 96 px circle. |
+| `assets/photos/hero.jpg` | Big picture on the intro page (replaces the stomach drawing) | **1000 × 1000 px**, square, JPG, under 300 KB | Shown in a soft rounded shape; keep the subject in the middle. |
+| `assets/share.jpg` | The preview card when the link is shared on WhatsApp/Facebook | **exactly 1200 × 630 px**, JPG, under 300 KB | Already made for you. Replace only if you want your own design. Keep text inside the middle 1000 × 520 px. |
+
+**How to upload a photo:**
+
+1. Make the photo the right size (free: canva.com → *Custom size*, or squoosh.app to
+   shrink the file). Save it as **JPG** with **exactly the same name**, e.g. `doctor.jpg`
+   (all small letters).
+2. On GitHub open **score → assets → photos**.
+3. Click **Add file → Upload files**, drag your `doctor.jpg` in, and click
+   **Commit changes**. It replaces the placeholder.
+4. Wait 2–5 minutes and refresh the result page. The photo appears by itself.
+
+To remove a photo later, open it on GitHub, click **⋯ → Delete file**, commit. The
+page simply hides that slot again.
+
+**WhatsApp preview not updating?** WhatsApp remembers old previews for a while. Test with
+the link plus `?v=2` at the end (e.g. `…/score/?v=2`).
 
 ---
 
@@ -124,6 +188,11 @@ So the score app gets its own small repository.
    wait an hour and come back. GitHub is still preparing the security certificate.
 5. Open `https://score.yourclinic.com` and do the assessment once.
 
+6. In the new repository open **index.html** (pencil icon) and replace the two
+   addresses that start with `https://ihkarise.github.io/ENZO-CLINIC-/score/` with
+   `https://score.yourclinic.com/` (keep `assets/share.jpg` at the end of the first one).
+   This makes the WhatsApp link preview show on your own address.
+
 **Important:** from now on, change settings (Stage "Changing the settings") in the
 **`enzo-gut-score`** repository. Its `config.js` is at **js** → **config.js**.
 
@@ -135,9 +204,11 @@ never affected.
 
 ## Things to know
 
-- **Patients don't log in, and nothing is saved.** Answers stay on the patient's own
-  phone and disappear when they close the page. The clinic **does not receive**
-  results. Patients can tap **Print result** and bring it to the consultation.
+- **Patients don't log in, and nothing is saved on the website.** Answers stay on the
+  patient's phone. The clinic only receives a result when the patient taps the
+  WhatsApp button **and** presses Send. They can read or change the message first.
+- WhatsApp messages contain health information. Keep the clinic phone locked and only
+  let authorised staff use the WhatsApp Business account.
 - **Saving results to the clinic's Google Sheet isn't switched on.** That needs a
   developer to add a new, secured part to the Apps Script. See `README.md` §8.
 - **If a patient ticks a warning sign** (e.g. blood in stool, chest pain), the result
